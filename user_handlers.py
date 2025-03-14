@@ -632,26 +632,29 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         try:
             float_prop = float(prop)
             if bot_price is not None and abs(float_prop - bot_price) < 1e-9:
+                # Якщо ціна співпадає з ціною, розрахованою ботом – фарбуємо клітинку зеленим (стовпець 13)
                 color_cell_green(sheet_row, col=13)
             else:
-                color_cell_green(sheet_row, col=12)
-        except:
-            color_cell_green(sheet_row, col=12)
+                # Якщо ціна підтверджена від менеджера – очищаємо клітинку і встановлюємо білий фон (стовпець 13)
+                delete_price_cell_in_table2(sheet_row, col=13)
+        except Exception:
+            delete_price_cell_in_table2(sheet_row, col=13)
     save_applications(apps)
+    
     timestamp = app.get("timestamp", "")
     try:
         dt = datetime.fromisoformat(timestamp)
         formatted_date = dt.strftime("%d.%m.%Y")
-    except:
+    except Exception:
         formatted_date = timestamp or "—"
+    
     extra_fields = app.get("extra_fields", {})
     extra_list = []
     for key, value in extra_fields.items():
         ukr_name = friendly_names.get(key, key)
         extra_list.append(f"{ukr_name}: {value}")
-    extra_part = ""
-    if extra_list:
-        extra_part = f"Додаткові параметри:\n<b>{chr(10).join(extra_list)}</b>\n"
+    extra_part = f"Додаткові параметри:\n<b>{chr(10).join(extra_list)}</b>\n" if extra_list else ""
+    
     user_fullname = app.get("fullname", "")
     phone_from_app = app.get("phone", "")
     if not phone_from_app:
@@ -664,6 +667,7 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         user_fullname = users.get("approved_users", {}).get(uid, {}).get("fullname", "—")
     user_fullname_line = f"Користувач: {user_fullname}"
     user_phone_line = f"Телефон: {phone_from_app}"
+    
     admin_msg = (
         "<b>ЗАЯВКА ПІДТВЕРДЖЕНА</b>\n\n"
         "Повна інформація по заявці:\n"
@@ -684,13 +688,17 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         f"{user_fullname_line}\n"
         f"{user_phone_line}"
     )
+    
     for admin_id in ADMINS:
         try:
             await bot.send_message(admin_id, admin_msg)
         except Exception as e:
             logging.exception(f"Не вдалося відправити підтвердження адміну {admin_id}: {e}")
-    await message.answer("Ви підтвердили пропозицію. Очікуйте на подальші дії від менеджера/адміністратора.",
-                         reply_markup=get_main_menu_keyboard())
+    
+    await message.answer(
+        "Ви підтвердили пропозицію. Очікуйте на подальші дії від менеджера/адміністратора.",
+        reply_markup=get_main_menu_keyboard()
+    )
     await state.finish()
 
 
