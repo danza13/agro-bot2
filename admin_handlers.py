@@ -5,11 +5,11 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text, Regexp
 
 from loader import dp, bot
-from config import ADMINS
+from config import ADMINS, friendly_names
 from states import AdminMenuStates, AdminReview
 from keyboards import (
     remove_keyboard, get_admin_root_menu, get_admin_moderation_menu,
-    get_admin_requests_menu
+    get_admin_requests_menu, get_main_menu_keyboard
 )
 from db import (
     load_users, save_users, load_applications, save_applications,
@@ -22,6 +22,10 @@ from gsheet_utils import (
     get_worksheet1, delete_price_cell_in_table2
 )
 
+
+############################################
+# Вхід в адмін-меню
+############################################
 
 @dp.message_handler(commands=["admin"], state="*")
 async def admin_entry_point(message: types.Message, state: FSMContext):
@@ -46,15 +50,14 @@ async def admin_menu_choosing_section(message: types.Message, state: FSMContext)
         await AdminMenuStates.requests_section.set()
     elif text == "Вийти з адмін-меню":
         await state.finish()
-        from keyboards import get_main_menu_keyboard
         await message.answer("Вихід з адмін-меню. Повертаємось у звичайне меню:", reply_markup=get_main_menu_keyboard())
     else:
         await message.answer("Будь ласка, оберіть із меню: «Модерація», «Заявки» або «Вийти з адмін-меню».")
 
 
-########################################################
+############################################
 # МОДЕРАЦІЯ КОРИСТУВАЧІВ
-########################################################
+############################################
 
 @dp.message_handler(state=AdminMenuStates.moderation_section)
 async def admin_moderation_section_handler(message: types.Message, state: FSMContext):
@@ -96,6 +99,7 @@ async def admin_moderation_section_handler(message: types.Message, state: FSMCon
                 row = []
         if row:
             kb.row(*row)
+        # Додаємо кнопки для експорту та повернення
         kb.add("Вивантажити базу", "Назад")
 
         await state.update_data(approved_dict=approved_dict, from_moderation_menu=True)
@@ -107,7 +111,7 @@ async def admin_moderation_section_handler(message: types.Message, state: FSMCon
         await AdminMenuStates.choosing_section.set()
     else:
         await message.answer("Оберіть зі списку: «Користувачі на модерацію», «База користувачів» або «Назад».")
-        
+
 
 @dp.message_handler(state=AdminReview.waiting_for_application_selection)
 async def admin_select_pending_application(message: types.Message, state: FSMContext):
@@ -127,8 +131,7 @@ async def admin_select_pending_application(message: types.Message, state: FSMCon
             break
 
     if not uid:
-        await message.answer("Заявку не знайдено. Спробуйте ще раз або натисніть 'Назад'.",
-                             reply_markup=remove_keyboard())
+        await message.answer("Заявку не знайдено. Спробуйте ще раз або натисніть 'Назад'.", reply_markup=remove_keyboard())
         return
 
     info = pending[uid]
@@ -201,18 +204,44 @@ async def admin_decision_pending_user(message: types.Message, state: FSMContext)
     await AdminMenuStates.moderation_section.set()
 
 
-#
+############################################
 # База користувачів (схвалені)
-#
+############################################
 
 @dp.message_handler(Text(equals="Вивантажити базу"), state=AdminReview.viewing_approved_list)
 async def handle_export_database(message: types.Message, state: FSMContext):
     try:
         export_database()
-        await message.answer("База успішно вивантажена до Google Sheets.", reply_markup=get_admin_moderation_menu())
+        # Відновлюємо клавіатуру "База користувачів", використовуючи дані з стану
+        data = await state.get_data()
+        approved_dict = data.get("approved_dict", {})
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        row = []
+        for name in approved_dict.keys():
+            row.append(name)
+            if len(row) == 2:
+                kb.row(*row)
+                row = []
+        if row:
+            kb.row(*row)
+        kb.add("Вивантажити базу", "Назад")
+        await message.answer("База успішно вивантажена до Google Sheets.", reply_markup=kb)
     except Exception as e:
         logging.exception(f"Помилка вивантаження бази: {e}")
-        await message.answer("Помилка вивантаження бази.", reply_markup=get_admin_moderation_menu())
+        # Також відновлюємо клавіатуру "База користувачів" при помилці
+        data = await state.get_data()
+        approved_dict = data.get("approved_dict", {})
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        row = []
+        for name in approved_dict.keys():
+            row.append(name)
+            if len(row) == 2:
+                kb.row(*row)
+                row = []
+        if row:
+            kb.row(*row)
+        kb.add("Вивантажити базу", "Назад")
+        await message.answer("Помилка вивантаження бази.", reply_markup=kb)
 
 
 @dp.message_handler(state=AdminReview.viewing_approved_list)
@@ -318,7 +347,7 @@ async def admin_view_approved_single_user(message: types.Message, state: FSMCont
         await AdminMenuStates.moderation_section.set()
     else:
         await message.answer("Оберіть: «Редагувати», «Видалити» або «Назад».")
-        
+
 
 @dp.message_handler(state=AdminReview.editing_approved_user)
 async def admin_edit_approved_user_menu(message: types.Message, state: FSMContext):
@@ -395,7 +424,6 @@ async def admin_edit_approved_user_fullname(message: types.Message, state: FSMCo
 
 @dp.message_handler(state=AdminReview.editing_approved_user_phone)
 async def admin_edit_approved_user_phone(message: types.Message, state: FSMContext):
-    import re
     new_phone = re.sub(r"[^\d+]", "", message.text.strip())
     if not re.fullmatch(r"\+380\d{9}", new_phone):
         await message.answer("Невірний формат. Введіть номер у форматі +380XXXXXXXXX або «Назад» для відміни.")
@@ -426,9 +454,9 @@ async def admin_edit_approved_user_phone(message: types.Message, state: FSMConte
     await message.answer("Оновлено! Оберіть наступну дію:", reply_markup=kb)
 
 
-########################################################
+############################################
 # Розділ "Заявки"
-########################################################
+############################################
 
 @dp.message_handler(state=AdminMenuStates.requests_section)
 async def admin_requests_section_handler(message: types.Message, state: FSMContext):
@@ -512,11 +540,14 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
                     kb.add(btn_text)
             kb.add("Назад")
             await message.answer("Оберіть заявку для видалення:", reply_markup=kb)
+            # Встановлюємо стан не як перегляд видалених, а окремо для видалення
+            await AdminReview.confirm_deletion_app.set()
         except Exception as e:
             logging.exception("Помилка отримання заявок з Google Sheets")
             await message.answer("Помилка отримання заявок.", reply_markup=get_admin_requests_menu())
 
     elif text == "Редагування заявок":
+        # Використовуємо блок, який показує список користувачів із активними заявками
         apps = load_applications()
         users_with_active_apps = {}
         for uid, user_apps in apps.items():
@@ -541,13 +572,13 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
         await AdminMenuStates.choosing_section.set()
     else:
         await message.answer("Оберіть дію: «Підтверджені», «Видалені», «Редагування заявок», «Видалення заявок» або «Назад».")
-        
 
-########################################################
-# Процес видалення заявки (вручну з таблиці)
-########################################################
 
-@dp.message_handler(lambda message: re.match(r"^\d+\s\(рядок\s\d+\)$", message.text), state=AdminReview.viewing_deleted_list)
+############################################
+# Видалення заявки (вручну з таблиці)
+############################################
+
+@dp.message_handler(lambda message: re.match(r"^\d+\s\(рядок\s\d+\)$", message.text), state=AdminReview.confirm_deletion_app)
 async def handle_delete_application_selection(message: types.Message, state: FSMContext):
     text = message.text.strip()
     match = re.search(r"\(рядок\s(\d+)\)$", text)
@@ -569,7 +600,6 @@ async def handle_delete_application_selection(message: types.Message, state: FSM
                 kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
                 kb.add("Видалити назавжди", "Назад")
                 await message.answer(f"Ви обрали заявку з рядка {row_number}.\nОберіть дію:", reply_markup=kb)
-                await AdminReview.confirm_deletion_app.set()
                 found = True
                 break
         if found:
@@ -579,10 +609,9 @@ async def handle_delete_application_selection(message: types.Message, state: FSM
 
 
 @dp.message_handler(Text(equals="Назад"), state=AdminReview.confirm_deletion_app)
-async def confirm_deletion_no(message: types.Message, state: FSMContext):
+async def confirm_deletion_cancel(message: types.Message, state: FSMContext):
     data = await state.get_data()
     from_requests_menu = data.get("from_requests_menu", False)
-    # Якщо надходить із розділу "Заявки", повертаємо до нього
     if from_requests_menu:
         await message.answer("Повертаємось до розділу 'Заявки':", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
@@ -591,7 +620,7 @@ async def confirm_deletion_no(message: types.Message, state: FSMContext):
         await message.answer("Головне меню адміна:", reply_markup=get_admin_root_menu())
 
 
-@dp.message_handler(Text(equals="Так"), state=AdminReview.confirm_deletion_app)
+@dp.message_handler(Text(equals="Видалити назавжди"), state=AdminReview.confirm_deletion_app)
 async def confirm_deletion_yes(message: types.Message, state: FSMContext):
     data = await state.get_data()
     uid = data.get("deletion_uid")
@@ -607,18 +636,13 @@ async def confirm_deletion_yes(message: types.Message, state: FSMContext):
         await message.answer(f"Заявку з рядка {row_number} успішно видалено.", reply_markup=get_admin_requests_menu())
     else:
         await message.answer("Помилка видалення заявки.", reply_markup=get_admin_requests_menu())
+    await AdminMenuStates.requests_section.set()
     await state.finish()
 
 
-@dp.message_handler(Text(equals="Ні"), state=AdminReview.confirm_deletion_app)
-async def confirm_deletion_no(message: types.Message, state: FSMContext):
-    await state.finish()
-    await message.answer("Видалення скасовано. Повертаємось до списку заявок.", reply_markup=get_admin_requests_menu())
-
-
-########################################################
+############################################
 # Перегляд "Підтверджених" заявок
-########################################################
+############################################
 
 @dp.message_handler(state=AdminReview.viewing_confirmed_list)
 async def admin_view_confirmed_list_choice(message: types.Message, state: FSMContext):
@@ -673,7 +697,6 @@ async def admin_view_confirmed_list_choice(message: types.Message, state: FSMCon
     ]
 
     extra = app_data.get("extra_fields", {})
-    from config import friendly_names
     if extra:
         details.append("Додаткові параметри:")
         for key, value in extra.items():
@@ -733,11 +756,11 @@ async def admin_view_confirmed_app_handler(message: types.Message, state: FSMCon
         await AdminMenuStates.requests_section.set()
     else:
         await message.answer("Оберіть «Видалити» або «Назад».")
-        
 
-########################################################
+
+############################################
 # Перегляд "Видалених"
-########################################################
+############################################
 
 @dp.message_handler(state=AdminReview.viewing_deleted_list)
 async def admin_view_deleted_list_choice(message: types.Message, state: FSMContext):
@@ -793,7 +816,6 @@ async def admin_view_deleted_list_choice(message: types.Message, state: FSMConte
     ]
 
     extra = app_data.get("extra_fields", {})
-    from config import friendly_names
     if extra:
         details.append("Додаткові параметри:")
         for key, value in extra.items():
@@ -853,37 +875,56 @@ async def admin_view_deleted_app_handler(message: types.Message, state: FSMConte
             await message.answer("Заявку остаточно видалено з файлу та таблиць.", reply_markup=get_admin_requests_menu())
         else:
             await message.answer("Помилка: Заявка не знайдена або вже була видалена.", reply_markup=get_admin_requests_menu())
-
         await AdminMenuStates.requests_section.set()
     else:
         await message.answer("Оберіть «Видалити назавжди» або «Назад».")
-        
 
-########################################################
-# Редагування заявок (AdminReview.editing_applications_list)
-########################################################
 
+############################################
+# РЕДАГУВАННЯ ЗАЯВОК
+############################################
+
+# 1. Хендлер для кнопки "Редагування заявок" – показ списку користувачів із активними заявками
+@dp.message_handler(Text(equals="Редагування заявок"), state=AdminMenuStates.requests_section)
+async def handle_editing_applications(message: types.Message, state: FSMContext):
+    apps = load_applications()
+    users_with_active_apps = {}
+    for uid, user_apps in apps.items():
+        active_apps = [app for app in user_apps if app.get("proposal_status") == "active"]
+        if active_apps:
+            user_info = load_users().get("approved_users", {}).get(uid, {})
+            display_name = user_info.get("fullname", f"User {uid}")
+            users_with_active_apps[display_name] = uid
+    if not users_with_active_apps:
+        await message.answer("Немає користувачів з активними заявками.", reply_markup=get_admin_requests_menu())
+        return
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    for name in users_with_active_apps.keys():
+        kb.add(name)
+    kb.add("Назад")
+    await state.update_data(editing_users=users_with_active_apps)
+    await message.answer("Оберіть користувача для редагування заявок:", reply_markup=kb)
+    await AdminReview.editing_applications_list.set()
+
+
+# 2. Хендлер для вибору користувача – показ списку всіх заявок цього користувача
 @dp.message_handler(state=AdminReview.editing_applications_list)
 async def admin_select_user_for_editing(message: types.Message, state: FSMContext):
     if message.text == "Назад":
         await message.answer("Повертаємось до меню заявок.", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
         return
-
     data = await state.get_data()
     editing_users = data.get("editing_users", {})
     uid = editing_users.get(message.text)
     if not uid:
         await message.answer("Будь ласка, оберіть користувача зі списку або натисніть 'Назад'.")
         return
-
-    from db import load_applications
     user_apps = load_applications().get(uid, [])
     if not user_apps:
         await message.answer("Для цього користувача немає заявок.", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
         return
-
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     for i, app in enumerate(user_apps, start=1):
         culture = app.get("culture", "Невідомо")
@@ -896,18 +937,16 @@ async def admin_select_user_for_editing(message: types.Message, state: FSMContex
     await AdminReview.editing_single_application.set()
 
 
+# 3. Хендлер для вибору конкретної заявки – показ повної інформації та запит нового статусу
 @dp.message_handler(Regexp(r"^\d+\.\s.+\s\|\s.+\sт$"), state=AdminReview.editing_single_application)
 async def admin_select_application_for_editing(message: types.Message, state: FSMContext):
     data = await state.get_data()
     uid = data.get("editing_uid")
-    from db import load_applications
     if not uid:
         await message.answer("Помилка даних.", reply_markup=get_admin_requests_menu())
         await state.finish()
         return
     user_apps = load_applications().get(uid, [])
-
-    import re
     match = re.match(r"^(\d+)\.", message.text.strip())
     if not match:
         await message.answer("Невірний формат. Спробуйте ще раз.")
@@ -916,7 +955,6 @@ async def admin_select_application_for_editing(message: types.Message, state: FS
     if index < 0 or index >= len(user_apps):
         await message.answer("Невірний вибір заявки.")
         return
-
     selected_app = user_apps[index]
     details = [
         "<b>Повна інформація по заявці:</b>",
@@ -935,13 +973,6 @@ async def admin_select_application_for_editing(message: types.Message, state: FS
         f"Пропозиція: {selected_app.get('proposal', '—')}",
         f"Поточний статус: {selected_app.get('proposal_status', '')}"
     ]
-    from config import friendly_names
-    extra = selected_app.get("extra_fields", {})
-    if extra:
-        details.append("Додаткові параметри:")
-        for key, value in extra.items():
-            details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
-
     await state.update_data(editing_app_index=index)
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.row("Активна", "Видалена", "Підтверджена")
@@ -951,6 +982,7 @@ async def admin_select_application_for_editing(message: types.Message, state: FS
     await AdminReview.select_new_status.set()
 
 
+# 4. Хендлер для вибору нового статусу
 @dp.message_handler(lambda message: message.text in ["Активна", "Видалена", "Підтверджена"], state=AdminReview.select_new_status)
 async def update_app_status_via_edit(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -960,7 +992,6 @@ async def update_app_status_via_edit(message: types.Message, state: FSMContext):
         await message.answer("Помилка даних.", reply_markup=get_admin_requests_menu())
         await state.finish()
         return
-
     status_map = {
         "Активна": "active",
         "Видалена": "deleted",
@@ -969,20 +1000,19 @@ async def update_app_status_via_edit(message: types.Message, state: FSMContext):
     new_status = status_map.get(message.text, "")
     update_application_status(int(uid), app_index, new_status)
     await message.answer(f"Статус заявки оновлено на '{message.text}'.", reply_markup=get_admin_requests_menu())
-    # Повертаємо адміністратора до списку заявок для редагування
-    await AdminReview.editing_applications_list.set()
+    await AdminMenuStates.requests_section.set()
+    await state.finish()
 
 
+# 5. Хендлер для кнопки "Назад" у виборі статусу – повернення до списку заявок користувача
 @dp.message_handler(Text(equals="Назад"), state=AdminReview.select_new_status)
 async def editing_app_status_back(message: types.Message, state: FSMContext):
     data = await state.get_data()
     uid = data.get("editing_uid")
-    from db import load_applications
     if not uid:
         await message.answer("Помилка даних.", reply_markup=get_admin_requests_menu())
         await state.finish()
         return
-
     user_apps = load_applications().get(uid, [])
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     for i, app in enumerate(user_apps, start=1):
