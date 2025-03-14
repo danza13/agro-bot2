@@ -9,7 +9,7 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text, Regexp
 
-from bot import dp, bot
+from loader import dp, bot
 from config import ADMINS
 from states import RegistrationStates, ApplicationStates
 from keyboards import (
