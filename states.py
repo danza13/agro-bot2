@@ -13,12 +13,13 @@ class ApplicationStates(StatesGroup):
     waiting_for_webapp_data = State()
     confirm_application = State()
     editing_application = State()
-    viewing_application = State()
+    viewing_application = State()      # детальний перегляд заявки
+    viewing_applications = State()       # список заявок
+    viewing_proposal = State()           # перегляд пропозиції
     proposal_reply = State()
     confirm_deletion = State()
     waiting_for_phone_confirmation = State()
     waiting_for_price_confirmation = State()
-    viewing_applications = State()
 
 class AdminMenuStates(StatesGroup):
     choosing_section = State()
