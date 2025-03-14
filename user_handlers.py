@@ -631,37 +631,43 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
             confirmed_price = float(app.get("proposal", ""))
             bot_price = app.get("bot_price", None)
             if bot_price is not None and abs(confirmed_price - bot_price) < 1e-9:
-                # Користувач підтвердив ціну бота:
-                # - фарбувати клітинку з ціною бота (стовпець 13) зеленим,
-                # - клітинку з менеджерською ціною (стовпець 15) очищати (біла заливка).
-                color_cell_green(sheet_row, col=13)
+                # Користувач підтвердив ціну, яку розрахував бот:
+                # Очищуємо менеджерську ціну (стовпець 15)
                 delete_price_cell_in_table2(sheet_row, col=15)
             else:
                 # Користувач підтвердив менеджерську ціну:
-                # - клітинку з ціною бота (стовпець 13) очищати (біла заливка),
-                # - фарбувати клітинку з менеджерською ціною (стовпець 15) зеленим.
+                # Очищуємо ціну бота (стовпець 13)
                 delete_price_cell_in_table2(sheet_row, col=13)
-                color_cell_green(sheet_row, col=15)
         except Exception:
             delete_price_cell_in_table2(sheet_row, col=13)
             delete_price_cell_in_table2(sheet_row, col=15)
+        try:
+            # Фарбування у зелений всього рядка заявки в обох таблицях
+            ws1 = get_worksheet1()
+            ws2 = get_worksheet2()
+            color_entire_row_green(ws1, sheet_row)
+            color_entire_row_green(ws2, sheet_row)
+        except Exception as e:
+            logging.exception(f"Помилка фарбування рядка {sheet_row}: {e}")
     save_applications(apps)
 
-    
+    # Форматуємо дату створення заявки
     timestamp = app.get("timestamp", "")
     try:
         dt = datetime.fromisoformat(timestamp)
         formatted_date = dt.strftime("%d.%m.%Y")
     except Exception:
         formatted_date = timestamp or "—"
-    
+
+    # Формуємо додаткові параметри, якщо є
     extra_fields = app.get("extra_fields", {})
     extra_list = []
     for key, value in extra_fields.items():
         ukr_name = friendly_names.get(key, key)
         extra_list.append(f"{ukr_name}: {value}")
     extra_part = f"Додаткові параметри:\n<b>{chr(10).join(extra_list)}</b>\n" if extra_list else ""
-    
+
+    # Отримуємо дані користувача
     user_fullname = app.get("fullname", "")
     phone_from_app = app.get("phone", "")
     if not phone_from_app:
@@ -674,7 +680,8 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         user_fullname = users.get("approved_users", {}).get(uid, {}).get("fullname", "—")
     user_fullname_line = f"Користувач: {user_fullname}"
     user_phone_line = f"Телефон: {phone_from_app}"
-    
+
+    # Формуємо повідомлення для адміністраторів із повною інформацією по заявці
     admin_msg = (
         "<b>ЗАЯВКА ПІДТВЕРДЖЕНА</b>\n\n"
         "Повна інформація по заявці:\n"
@@ -695,13 +702,13 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         f"{user_fullname_line}\n"
         f"{user_phone_line}"
     )
-    
+
     for admin_id in ADMINS:
         try:
             await bot.send_message(admin_id, admin_msg)
         except Exception as e:
             logging.exception(f"Не вдалося відправити підтвердження адміну {admin_id}: {e}")
-    
+
     await message.answer(
         "Ви підтвердили пропозицію. Очікуйте на подальші дії від менеджера/адміністратора.",
         reply_markup=get_main_menu_keyboard()
