@@ -116,9 +116,18 @@ def delete_price_cell_in_table2(row: int, col: int = 12):
     logging.debug("Видалення клітинки завершено.")
 
 def color_entire_row_green(ws, row: int):
-    # ws.col_count повертає загальну кількість колонок на аркуші
-    last_cell = rowcol_to_a1(row, ws.col_count)
+    """
+    Застосовує зелений фон до всього рядка у вказаному аркуші (ws).
+    Форматування встановлюється для діапазону від першої до останньої клітинки рядка.
+    При цьому, якщо дані зміщуються (наприклад, після видалення рядка),
+    форматування також «пересувається» разом із рядком.
+    """
+    # Отримуємо загальну кількість колонок на аркуші
+    total_columns = ws.col_count
+    # Обчислюємо адресу останньої клітинки (наприклад, для 26 колонок це буде "Z")
+    last_cell = rowcol_to_a1(row, total_columns)
     cell_range = f"A{row}:{last_cell}"
+    # Використовуємо green_format, який вже визначено (фон із значенням Color(0.8, 1, 0.8))
     format_cell_range(ws, cell_range, green_format)
     logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
 
