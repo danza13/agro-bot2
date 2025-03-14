@@ -178,13 +178,10 @@ def export_database():
 ############################################
 
 async def admin_remove_app_permanently(user_id: int, app_index: int):
-<<<<<<< HEAD
-=======
     """
     Видаляє заявку адміністратора з файлу і таблиці.
     При цьому polling призупиняється на 20 секунд перед відновленням.
     """
->>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
     logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
     from db import load_applications, delete_application_from_file_entirely, save_applications
     from loader import pause_polling, resume_polling
@@ -198,10 +195,7 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
     uid = str(user_id)
     if uid not in apps or app_index < 0 or app_index >= len(apps[uid]):
         logging.error("Не знайдено заявку для видалення.")
-<<<<<<< HEAD
-=======
         resume_polling()
->>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
         return False
 
     app = apps[uid][app_index]
@@ -223,11 +217,8 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             # Видаляємо рядок у worksheet1
             ws = get_worksheet1()
             ws.delete_rows(sheet_row)
-<<<<<<< HEAD
             logging.debug(f"Видалено рядок {sheet_row} у Google Sheets.")
-=======
             logging.debug(f"Видалено рядок {sheet_row} у worksheet1.")
->>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
 
             # Оновлюємо sheet_row для решти заявок
             updated_apps = load_applications()
@@ -240,15 +231,13 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             logging.debug("Оновлено номери рядків для заявок після видалення.")
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
-<<<<<<< HEAD
-=======
+
 
     # Чекаємо 20 секунд перед відновленням polling'у
     logging.info("Чекаємо 20 секунд перед відновленням polling'у.")
     await asyncio.sleep(20)
     resume_polling()
     logging.info("Polling відновлено після видалення заявки.")
->>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
     return True
 
 ############################################
