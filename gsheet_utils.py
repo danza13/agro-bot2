@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-=======
 #gsheet_utils.py
->>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
 import logging
 from datetime import datetime
 import requests
