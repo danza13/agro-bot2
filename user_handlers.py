@@ -287,7 +287,8 @@ async def view_application_detail(message: types.Message, state: FSMContext):
                 kb.row(*row)
             kb.row("Назад")
             await message.answer("Ваші заявки:", reply_markup=kb)
-        await state.finish()
+        # Замість state.finish() встановлюємо стан перегляду заявок
+        await ApplicationStates.viewing_applications.set()
         return
 
     user_id = message.from_user.id
