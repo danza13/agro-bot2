@@ -18,6 +18,7 @@ class ApplicationStates(StatesGroup):
     confirm_deletion = State()
     waiting_for_phone_confirmation = State()
     waiting_for_price_confirmation = State()
+    viewing_applications = State()
 
 class AdminMenuStates(StatesGroup):
     choosing_section = State()
