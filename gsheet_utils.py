@@ -197,8 +197,8 @@ def export_database():
 async def admin_remove_app_permanently(user_id: int, app_index: int):
     """
     Видаляє заявку адміністратора з файлу та з обох таблиць (worksheet1 та worksheet2).
-    Призупиняє polling, видаляє заявку, видаляє рядки у таблицях, оновлює індекси рядків,
-    після затримки відновлює polling.
+    Призупиняє polling, видаляє заявку, видаляє рядки у таблицях з затримкою між ними,
+    оновлює індекси рядків, після затримки відновлює polling.
     """
     logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
     from db import load_applications, delete_application_from_file_entirely, save_applications
@@ -231,7 +231,10 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             ws2 = get_worksheet2()
             ws2.delete_rows(sheet_row)
             logging.debug(f"Видалено рядок {sheet_row} у таблиці2.")
-
+            
+            # Затримка 3 секунди перед видаленням у таблиці1
+            await asyncio.sleep(3)
+            
             # Видаляємо рядок у таблиці1 (ws1)
             ws1 = get_worksheet1()
             ws1.delete_rows(sheet_row)
@@ -246,6 +249,9 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
                         a["sheet_row"] = old_row - 1
             save_applications(updated_apps)
             logging.debug("Оновлено номери рядків для заявок після видалення.")
+
+            # Повторно застосовуємо форматування для підтверджених заявок
+            reapply_confirmed_formatting()
 
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
