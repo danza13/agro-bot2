@@ -646,7 +646,12 @@ def calculate_and_set_bot_price(app, row, price_config):
     final_price = base_price - tariff_value
     if final_price < 0:
         final_price = 0
-    logging.info(f"Розрахована ціна: {final_price} (базова ціна {base_price} - тариф {tariff_value})")
 
+    # Якщо ціна ціла, перетворюємо її на int для видалення ".0"
+    if final_price == int(final_price):
+        final_price = int(final_price)
+
+    logging.info(f"Розрахована ціна: {final_price} (базова ціна {base_price} - тариф {tariff_value})")
     set_bot_price_in_table2(row, final_price)
     return final_price
+
