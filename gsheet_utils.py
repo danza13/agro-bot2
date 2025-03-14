@@ -262,7 +262,7 @@ def geocode_address(address: str) -> dict:
         response.raise_for_status()
         result = response.json()
         if result.get("status") == "OK" and result.get("results"):
-            return result["results"][0]["geometry"]["location"]  # {"lat": ..., "lng": ...}
+            return result["results"][0]["geometry"]["location"]  # Повертає, наприклад, {"lat": 50.4501, "lng": 30.5234}
         else:
             logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
     except Exception as e:
@@ -272,14 +272,14 @@ def geocode_address(address: str) -> dict:
 def get_distance_km(region: str, district: str, city: str) -> float:
     """
     Обчислює відстань між точкою з координатами (ODESSA_LAT, ODESSA_LNG)
-    та місцем, яке задається як адреса (формується за областю, районом і містом).
+    та місцем, яке задається адресою (формується за областю, районом і містом).
     Спочатку використовується Geocoding API для отримання координат адреси,
-    потім ComputeRouteMatrix API для розрахунку відстані (у метрах), яка конвертується в кілометри.
+    а потім ComputeRouteMatrix API для розрахунку відстані (у метрах), яка конвертується в кілометри.
     """
     if not GOOGLE_MAPS_API_KEY:
         return None
 
-    # Формуємо текстову адресу
+    # Формуємо адресу
     address = f"{city}, {district} район, {region} область, Ukraine"
     destination_location = geocode_address(address)
     if not destination_location:
@@ -321,24 +321,35 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-        # Вказуємо FieldMask для отримання необхідних полів (camelCase імена)
+        # Вказуємо FieldMask для отримання необхідних полів
         "X-Goog-FieldMask": "duration,distanceMeters,originIndex,destinationIndex"
     }
 
     try:
         r = requests.post(url, headers=headers, json=body, timeout=15)
         r.raise_for_status()
-        # ComputeRouteMatrix повертає NDJSON (кожен рядок – окремий JSON-об'єкт)
-        lines = r.text.strip().split('\n')
+        response_text = r.text.strip()
         parsed = None
-        for line in lines:
+
+        # Якщо відповідь починається з "[" – спробуємо обробити її як JSON-масив
+        if response_text.startswith("["):
             try:
-                parsed = json.loads(line)
-                # Якщо розбір вдалося, перериваємо цикл
-                break
-            except json.JSONDecodeError as e:
-                logging.error(f"JSON decode error for line: {line} - {e}")
-                continue
+                json_array = json.loads(response_text)
+                if isinstance(json_array, list) and json_array:
+                    parsed = json_array[0]
+            except Exception as e:
+                logging.error(f"Помилка розбору JSON-масиву: {e}")
+        else:
+            # Якщо це NDJSON – розбиваємо за рядками та намагаємося розпарсити кожен рядок
+            lines = response_text.split('\n')
+            for line in lines:
+                try:
+                    parsed = json.loads(line)
+                    if parsed is not None:
+                        break
+                except json.JSONDecodeError as e:
+                    logging.error(f"JSON decode error for line: {line} - {e}")
+                    continue
 
         if not parsed:
             return None
