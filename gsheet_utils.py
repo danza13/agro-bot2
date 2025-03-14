@@ -236,25 +236,32 @@ def update_google_sheet(data: dict) -> int:
 ############################################
 
 def geocode_address(address: str) -> dict:
+    """Геокодує адресу за допомогою Geocoding API і повертає словник з координатами."""
     geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {
         "address": address,
         "key": GOOGLE_MAPS_API_KEY
     }
-    response = requests.get(geocode_url, params=params, timeout=10)
-    if response.status_code == 200:
+    try:
+        response = requests.get(geocode_url, params=params, timeout=10)
+        response.raise_for_status()
         result = response.json()
         if result.get("status") == "OK" and result.get("results"):
-            return result["results"][0]["geometry"]["location"]  # {'lat': ..., 'lng': ...}
-    logging.error(f"Не вдалося геокодувати адресу: {address}")
+            return result["results"][0]["geometry"]["location"]  # повертає {"lat": ..., "lng": ...}
+        else:
+            logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
+    except Exception as e:
+        logging.exception(f"Помилка геокодування адреси: {address} - {e}")
     return None
 
 def get_distance_km(region: str, district: str, city: str) -> float:
+    """Обчислює відстань між точкою з координатами (ODESSA_LAT, ODESSA_LNG)
+    та місцем, яке задається як адреса (формується за областю, районом і містом).
+    Використовує спочатку Geocoding API для отримання координат адреси, а потім Routes API."""
     if not GOOGLE_MAPS_API_KEY:
         return None
 
     address = f"{city}, {district} район, {region} область, Ukraine"
-    # Спочатку геокодуємо адресу
     destination_location = geocode_address(address)
     if not destination_location:
         return None
@@ -262,7 +269,6 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     dest_lat = destination_location["lat"]
     dest_lng = destination_location["lng"]
 
-    # Формуємо запит до ComputeRouteMatrix з використанням координат
     url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
     body = {
         "origins": [
@@ -291,6 +297,7 @@ def get_distance_km(region: str, district: str, city: str) -> float:
         ],
         "travelMode": "DRIVE"
     }
+
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY
@@ -309,7 +316,9 @@ def get_distance_km(region: str, district: str, city: str) -> float:
             if parsed.get("status") == "OK":
                 dist_meters = parsed.get("distanceMeters", 0)
                 return dist_meters / 1000.0
-            return None
+            else:
+                logging.error(f"ComputeRouteMatrix returned error: {parsed}")
+                return None
         else:
             logging.error(f"Routes API error: {r.status_code}, {r.text}")
             return None
