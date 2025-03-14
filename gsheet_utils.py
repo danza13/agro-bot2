@@ -215,8 +215,9 @@ def export_database():
 
 async def admin_remove_app_permanently(user_id: int, app_index: int):
     """
-    Видаляє заявку адміністратора з файлу і таблиці.
-    При цьому polling призупиняється на 20 секунд перед відновленням.
+    Видаляє заявку адміністратора з файлу та з обох таблиць (worksheet1 та worksheet2).
+    Призупиняє polling, видаляє заявку, видаляє рядки у таблицях, оновлює індекси рядків,
+    після затримки відновлює polling.
     """
     logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
     from db import load_applications, delete_application_from_file_entirely, save_applications
@@ -245,18 +246,17 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
     # Якщо визначено рядок у Google Sheets, видаляємо дані
     if sheet_row:
         try:
-            # Видаляємо клітинки у таблиці2 для стовпців L, M, N, O (індекси 12, 13, 14, 15)
-            for col in [12, 13, 14, 15]:
-                logging.debug(f"Видалення клітинки в таблиці2: рядок {sheet_row}, стовпець {col}")
-                delete_price_cell_in_table2(sheet_row, col)
+            # Видаляємо рядок у таблиці2 (ws2)
+            ws2 = get_worksheet2()
+            ws2.delete_rows(sheet_row)
+            logging.debug(f"Видалено рядок {sheet_row} у таблиці2.")
 
-            # Видаляємо рядок у worksheet1
-            ws = get_worksheet1()
-            ws.delete_rows(sheet_row)
-            logging.debug(f"Видалено рядок {sheet_row} у Google Sheets.")
-            logging.debug(f"Видалено рядок {sheet_row} у worksheet1.")
+            # Видаляємо рядок у таблиці1 (ws1)
+            ws1 = get_worksheet1()
+            ws1.delete_rows(sheet_row)
+            logging.debug(f"Видалено рядок {sheet_row} у таблиці1.")
 
-            # Оновлюємо sheet_row для решти заявок
+            # Оновлюємо sheet_row для решти заявок (якщо рядки зміщуються)
             updated_apps = load_applications()
             for u_str, user_apps in updated_apps.items():
                 for a in user_apps:
@@ -265,13 +265,12 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
                         a["sheet_row"] = old_row - 1
             save_applications(updated_apps)
             logging.debug("Оновлено номери рядків для заявок після видалення.")
-            
-            # Після зміщення рядків повторно застосовуємо форматування для підтверджених заявок
+
+            # Повторно застосовуємо форматування для підтверджених заявок
             reapply_confirmed_formatting()
 
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
-
 
     # Чекаємо 20 секунд перед відновленням polling'у
     logging.info("Чекаємо 20 секунд перед відновленням polling'у.")
