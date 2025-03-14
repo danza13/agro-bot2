@@ -241,11 +241,12 @@ async def show_user_applications(message: types.Message, state: FSMContext):
             row = []
     if row:
         kb.row(*row)
-    # Додаємо кнопку "Назад", яка повертає до головного меню
-    kb.row("Назад")
-    await message.answer("Ваші заявки:", reply_markup=kb)
-    # Встановлюємо стан списку заявок
+    kb.row("Назад")  # ця кнопка повертає до головного меню
+    msg = await message.answer("Ваші заявки:", reply_markup=kb)
+    # Зберігаємо message_id для подальшого редагування клавіатури
+    await state.update_data(viewing_msg_id=msg.message_id)
     await ApplicationStates.viewing_applications.set()
+
 
 
 @dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_applications)
@@ -452,12 +453,19 @@ async def view_proposal(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_proposal)
 async def back_from_viewing_proposal(message: types.Message, state: FSMContext):
-    # Повертаємо користувача до детального перегляду заявки
-    await ApplicationStates.viewing_application.set()
-    # Можна повторно відправити детальну інформацію про заявку, якщо це потрібно
-    # Наприклад, отримати дані з state і повторно викликати view_application_detail
-    # Або просто повідомити користувача, що він повертається до перегляду заявки.
-    await message.answer("Повертаємо до детального перегляду заявки.")
+    data = await state.get_data()
+    viewing_msg_id = data.get("viewing_msg_id")
+    # Нова клавіатура: кнопки "Переглянути пропозицію" і "Назад"
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.row("Переглянути пропозицію", "Назад")
+    try:
+        await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=viewing_msg_id, reply_markup=kb)
+    except Exception as e:
+        logging.exception(f"Error updating reply keyboard: {e}")
+    # Не відправляємо додаткове повідомлення
+    # Залишаємо стан незмінним (або можна повторно встановити його, якщо потрібно)
+    await state.set_state(ApplicationStates.viewing_proposal)
+
 
 ############################################
 # "Відхилити" пропозицію
