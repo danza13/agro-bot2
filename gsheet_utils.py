@@ -262,7 +262,7 @@ def geocode_address(address: str) -> dict:
         response.raise_for_status()
         result = response.json()
         if result.get("status") == "OK" and result.get("results"):
-            return result["results"][0]["geometry"]["location"]
+            return result["results"][0]["geometry"]["location"]  # {"lat": ..., "lng": ...}
         else:
             logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
     except Exception as e:
@@ -279,6 +279,7 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     if not GOOGLE_MAPS_API_KEY:
         return None
 
+    # Формуємо текстову адресу
     address = f"{city}, {district} район, {region} область, Ukraine"
     destination_location = geocode_address(address)
     if not destination_location:
@@ -319,14 +320,15 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-        # Задаємо FieldMask для отримання необхідних полів
-        "X-Goog-FieldMask": "duration,distance_meter,origin_index,destination_index"
+        # Вказуємо FieldMask для отримання необхідних полів. 
+        # Зверніть увагу, що тут використовуються camelCase імена:
+        "X-Goog-FieldMask": "duration,distanceMeters,originIndex,destinationIndex"
     }
 
     try:
         r = requests.post(url, headers=headers, json=body, timeout=15)
         if r.status_code == 200:
-            # ComputeRouteMatrix API повертає NDJSON (newline-delimited JSON)
+            # ComputeRouteMatrix повертає NDJSON (newline-delimited JSON)
             lines = r.text.strip().split('\n')
             if not lines:
                 return None
@@ -335,7 +337,7 @@ def get_distance_km(region: str, district: str, city: str) -> float:
                 return None
             parsed = json.loads(data_line)
             if parsed.get("status") == "OK":
-                dist_meters = parsed.get("distance_meter", 0)
+                dist_meters = parsed.get("distanceMeters", 0)
                 return dist_meters / 1000.0
             else:
                 logging.error(f"ComputeRouteMatrix повернув помилку: {parsed}")
