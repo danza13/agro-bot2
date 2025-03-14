@@ -248,10 +248,7 @@ def update_google_sheet(data: dict) -> int:
 ############################################
 
 def geocode_address(address: str) -> dict:
-    """
-    Геокодує адресу за допомогою Geocoding API і повертає словник з координатами (lat, lng)
-    або None, якщо геокодування не вдалося.
-    """
+    """Геокодує адресу за допомогою Geocoding API і повертає словник з координатами (lat, lng)."""
     geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {
         "address": address,
@@ -262,7 +259,7 @@ def geocode_address(address: str) -> dict:
         response.raise_for_status()
         result = response.json()
         if result.get("status") == "OK" and result.get("results"):
-            return result["results"][0]["geometry"]["location"]  # Повертає, наприклад, {"lat": 50.4501, "lng": 30.5234}
+            return result["results"][0]["geometry"]["location"]
         else:
             logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
     except Exception as e:
@@ -270,13 +267,17 @@ def geocode_address(address: str) -> dict:
     return None
 
 def get_distance_km(region: str, district: str, city: str) -> float:
+    """
+    Обчислює відстань між початковою точкою (координати Одеси, ODESSA_LAT, ODESSA_LNG)
+    та адресою, що формується за областю, районом і містом, використовуючи спочатку Geocoding API
+    для отримання координат цільової адреси, а потім ComputeRouteMatrix API (Routes API) для розрахунку відстані.
+    """
     if not GOOGLE_MAPS_API_KEY:
         return None
 
-    # Формуємо адресу за областю, районом та містом
+    # Формуємо адресу
     address = f"{city}, {district} район, {region} область, Ukraine"
-
-    # Спочатку отримуємо координати адреси через Geocoding API
+    # Отримуємо координати цільової адреси
     destination_location = geocode_address(address)
     if not destination_location:
         return None
@@ -316,6 +317,7 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        # Вказуємо потрібні поля у відповіді
         "X-Goog-FieldMask": "duration,distanceMeters,originIndex,destinationIndex"
     }
 
@@ -323,18 +325,19 @@ def get_distance_km(region: str, district: str, city: str) -> float:
         r = requests.post(url, headers=headers, json=body, timeout=15)
         r.raise_for_status()
         response_text = r.text.strip()
-        parsed = None
 
+        # ComputeRouteMatrix повертає NDJSON. Якщо відповідь починається з '[' – це JSON-масив, інакше – NDJSON.
+        parsed = None
         if response_text.startswith("["):
             try:
                 json_array = json.loads(response_text)
-                if isinstance(json_array, list) and json_array:
+                if isinstance(json_array, list) and len(json_array) > 0:
                     parsed = json_array[0]
             except Exception as e:
                 logging.error(f"Помилка розбору JSON-масиву: {e}")
         else:
-            lines = response_text.split('\n')
-            for line in lines:
+            # NDJSON: розбиваємо на рядки та пробуємо розпарсити кожен
+            for line in response_text.split('\n'):
                 try:
                     parsed = json.loads(line)
                     if parsed is not None:
@@ -344,9 +347,10 @@ def get_distance_km(region: str, district: str, city: str) -> float:
                     continue
 
         if not parsed:
+            logging.error("Не вдалося розпарсити відповідь від ComputeRouteMatrix.")
             return None
 
-        # Замість перевірки "status", перевіряємо, чи міститься поле "distanceMeters"
+        # Якщо в об'єкті є поле "distanceMeters", вважаємо, що відповідь успішна
         if "distanceMeters" in parsed:
             dist_meters = parsed.get("distanceMeters", 0)
             return dist_meters / 1000.0
