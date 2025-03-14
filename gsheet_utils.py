@@ -1,3 +1,4 @@
+#gsheet_utils.py
 import logging
 from datetime import datetime
 import requests
@@ -17,6 +18,10 @@ from gspread_formatting import (
 from gspread.utils import rowcol_to_a1
 
 from db import load_applications, save_applications, load_users
+
+############################################
+# Ініціалізація gspread
+############################################
 
 ############################################
 # Ініціалізація gspread
@@ -111,11 +116,21 @@ def delete_price_cell_in_table2(row: int, col: int = 12):
     logging.debug("Видалення клітинки завершено.")
 
 def color_entire_row_green(ws, row: int):
+    """
+    Застосовує зелений фон до всього рядка у вказаному аркуші (ws).
+    Форматування встановлюється для діапазону від першої до останньої клітинки рядка.
+    При цьому, якщо дані зміщуються (наприклад, після видалення рядка),
+    форматування також «пересувається» разом із рядком.
+    """
+    # Отримуємо загальну кількість колонок на аркуші
     total_columns = ws.col_count
+    # Обчислюємо адресу останньої клітинки (наприклад, для 26 колонок це буде "Z")
     last_cell = rowcol_to_a1(row, total_columns)
     cell_range = f"A{row}:{last_cell}"
+    # Використовуємо green_format, який вже визначено (фон із значенням Color(0.8, 1, 0.8))
     format_cell_range(ws, cell_range, green_format)
     logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
+
 
 ############################################
 # Експорт бази даних у Google Sheets
@@ -180,11 +195,17 @@ def export_database():
 ############################################
 
 async def admin_remove_app_permanently(user_id: int, app_index: int):
+    """
+    Видаляє заявку адміністратора з файлу та з обох таблиць (worksheet1 та worksheet2).
+    Призупиняє polling, видаляє заявку, видаляє рядки у таблицях з затримкою між ними,
+    оновлює індекси рядків, після затримки відновлює polling.
+    """
     logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
     from db import load_applications, delete_application_from_file_entirely, save_applications
     from loader import pause_polling, resume_polling
     import asyncio
 
+    # Призупиняємо polling
     pause_polling()
     logging.info("Polling призупинено перед видаленням заявки.")
 
@@ -199,18 +220,27 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
     sheet_row = app.get("sheet_row")
     logging.debug(f"Заявка знаходиться у рядку: {sheet_row}")
 
+    # Видаляємо заявку з локального файлу
     delete_application_from_file_entirely(user_id, app_index)
     logging.debug("Заявка видалена з локального файлу.")
 
+    # Якщо визначено рядок у Google Sheets, видаляємо дані
     if sheet_row:
         try:
+            # Видаляємо рядок у таблиці2 (ws2)
             ws2 = get_worksheet2()
             ws2.delete_rows(sheet_row)
             logging.debug(f"Видалено рядок {sheet_row} у таблиці2.")
+            
+            # Затримка 3 секунди перед видаленням у таблиці1
             await asyncio.sleep(3)
+            
+            # Видаляємо рядок у таблиці1 (ws1)
             ws1 = get_worksheet1()
             ws1.delete_rows(sheet_row)
             logging.debug(f"Видалено рядок {sheet_row} у таблиці1.")
+
+            # Оновлюємо sheet_row для решти заявок (якщо рядки зміщуються)
             updated_apps = load_applications()
             for u_str, user_apps in updated_apps.items():
                 for a in user_apps:
@@ -219,9 +249,14 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
                         a["sheet_row"] = old_row - 1
             save_applications(updated_apps)
             logging.debug("Оновлено номери рядків для заявок після видалення.")
+
+            # Повторно застосовуємо форматування для підтверджених заявок
+            reapply_confirmed_formatting()
+
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
 
+    # Чекаємо 20 секунд перед відновленням polling'у
     logging.info("Чекаємо 20 секунд перед відновленням polling'у.")
     await asyncio.sleep(20)
     resume_polling()
@@ -301,6 +336,7 @@ def update_google_sheet(data: dict) -> int:
 ############################################
 
 def geocode_address(address: str) -> dict:
+    """Геокодує адресу за допомогою Geocoding API і повертає словник з координатами (lat, lng)."""
     logging.debug(f"Геокодування адреси: {address}")
     geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {
@@ -315,7 +351,7 @@ def geocode_address(address: str) -> dict:
         if result.get("status") == "OK" and result.get("results"):
             loc = result["results"][0]["geometry"]["location"]
             logging.info(f"Адресу {address} геокодовано: {loc}")
-            return loc
+            return loc  # повертає {"lat": ..., "lng": ...}
         else:
             logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
     except Exception as e:
@@ -323,11 +359,17 @@ def geocode_address(address: str) -> dict:
     return None
 
 def get_distance_km(region: str, district: str, city: str) -> float:
+    """
+    Обчислює відстань між початковою точкою (координати Одеси, ODESSA_LAT, ODESSA_LNG)
+    та адресою, що формується за областю, районом і містом, використовуючи спочатку Geocoding API
+    для отримання координат цільової адреси, а потім ComputeRouteMatrix API (Routes API) для розрахунку відстані.
+    """
     logging.info(f"Обчислення відстані для адреси: {city}, {district} район, {region} область, Ukraine")
     if not GOOGLE_MAPS_API_KEY:
         logging.error("Відсутній GOOGLE_MAPS_API_KEY")
         return None
 
+    # Формуємо адресу
     address = f"{city}, {district} район, {region} область, Ukraine"
     destination_location = geocode_address(address)
     if not destination_location:
@@ -628,6 +670,7 @@ def calculate_and_set_bot_price(app, row, price_config):
     if final_price < 0:
         final_price = 0
 
+    # Якщо ціна ціла, перетворюємо її на int для видалення ".0"
     if final_price == int(final_price):
         final_price = int(final_price)
 
@@ -635,11 +678,3 @@ def calculate_and_set_bot_price(app, row, price_config):
     set_bot_price_in_table2(row, final_price)
     return final_price
 
-############################################
-# Оновлення дати редагування у таблиці2
-############################################
-
-def update_edit_date_in_table2(row: int, date_str: str, col: int = 14):
-    logging.debug(f"Оновлення дати редагування в таблиці2: рядок {row}, стовпець {col}")
-    ws2 = get_worksheet2()
-    ws2.update_cell(row, col, date_str)
