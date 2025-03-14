@@ -288,6 +288,7 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     dest_lat = destination_location["lat"]
     dest_lng = destination_location["lng"]
 
+    # Формуємо запит до ComputeRouteMatrix API
     url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
     body = {
         "origins": [
@@ -320,30 +321,33 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-        # Вказуємо FieldMask для отримання необхідних полів. 
-        # Зверніть увагу, що тут використовуються camelCase імена:
+        # Вказуємо FieldMask для отримання необхідних полів (camelCase імена)
         "X-Goog-FieldMask": "duration,distanceMeters,originIndex,destinationIndex"
     }
 
     try:
         r = requests.post(url, headers=headers, json=body, timeout=15)
-        if r.status_code == 200:
-            # ComputeRouteMatrix повертає NDJSON (newline-delimited JSON)
-            lines = r.text.strip().split('\n')
-            if not lines:
-                return None
-            data_line = lines[0].strip()
-            if not data_line:
-                return None
-            parsed = json.loads(data_line)
-            if parsed.get("status") == "OK":
-                dist_meters = parsed.get("distanceMeters", 0)
-                return dist_meters / 1000.0
-            else:
-                logging.error(f"ComputeRouteMatrix повернув помилку: {parsed}")
-                return None
+        r.raise_for_status()
+        # ComputeRouteMatrix повертає NDJSON (кожен рядок – окремий JSON-об'єкт)
+        lines = r.text.strip().split('\n')
+        parsed = None
+        for line in lines:
+            try:
+                parsed = json.loads(line)
+                # Якщо розбір вдалося, перериваємо цикл
+                break
+            except json.JSONDecodeError as e:
+                logging.error(f"JSON decode error for line: {line} - {e}")
+                continue
+
+        if not parsed:
+            return None
+
+        if parsed.get("status") == "OK":
+            dist_meters = parsed.get("distanceMeters", 0)
+            return dist_meters / 1000.0
         else:
-            logging.error(f"Routes API error: {r.status_code}, {r.text}")
+            logging.error(f"ComputeRouteMatrix повернув помилку: {parsed}")
             return None
     except Exception as e:
         logging.exception(f"Помилка Routes API: {e}")
