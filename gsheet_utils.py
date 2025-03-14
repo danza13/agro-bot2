@@ -131,25 +131,6 @@ def color_entire_row_green(ws, row: int):
     format_cell_range(ws, cell_range, green_format)
     logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
 
-def reapply_confirmed_formatting():
-    """
-    Перескановує worksheet1 та для кожного рядка, що відповідає заявці
-    зі статусом 'confirmed', застосовує зелений фон до всього рядка.
-    Це дозволяє «перенести» форматування на нові позиції після зміщення рядків.
-    """
-    ws = get_worksheet1()
-    apps = load_applications()
-    for uid, app_list in apps.items():
-        for app in app_list:
-            # Якщо заявка підтверджена та вказано номер рядка
-            if app.get("proposal_status") == "confirmed" and app.get("sheet_row"):
-                try:
-                    row = app.get("sheet_row")
-                    color_entire_row_green(ws, row)
-                    logging.debug(f"Застосовано зелений фон для рядка {row} (UID: {uid}).")
-                except Exception as e:
-                    logging.exception(f"Помилка при повторному застосуванні форматування для UID {uid}, рядок {row}: {e}")
-
 
 ############################################
 # Експорт бази даних у Google Sheets
@@ -265,9 +246,6 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
                         a["sheet_row"] = old_row - 1
             save_applications(updated_apps)
             logging.debug("Оновлено номери рядків для заявок після видалення.")
-
-            # Повторно застосовуємо форматування для підтверджених заявок
-            reapply_confirmed_formatting()
 
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
