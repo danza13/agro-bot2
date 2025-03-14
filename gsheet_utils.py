@@ -1,7 +1,7 @@
-# gsheet_utils.py
 import logging
 from datetime import datetime
 import requests
+import json
 
 import gspread
 from config import (
@@ -17,6 +17,10 @@ from gspread_formatting import (
 from gspread.utils import rowcol_to_a1
 
 from db import load_applications, save_applications
+
+############################################
+# Ініціалізація gspread
+############################################
 
 def init_gspread():
     scope = [
@@ -47,6 +51,9 @@ def ensure_columns(ws, required_col: int):
     if ws.col_count < required_col:
         ws.resize(rows=ws.row_count, cols=required_col)
 
+############################################
+# Форматування клітинок
+############################################
 
 red_format = cellFormat(backgroundColor=Color(1, 0.8, 0.8))
 green_format = cellFormat(backgroundColor=Color(0.8, 1, 0.8))
@@ -68,23 +75,23 @@ def color_cell_yellow(row: int, col: int = 12):
 
 def delete_price_cell_in_table2(row: int, col: int = 12):
     ws2 = get_worksheet2()
-
     format_cell_range(
         ws2,
         f"{rowcol_to_a1(row, col)}:{rowcol_to_a1(ws2.row_count, col)}",
         cellFormat(backgroundColor=Color(1, 1, 1))
     )
-
     col_values = ws2.col_values(col)
     if row - 1 >= len(col_values):
         return
-
     col_values.pop(row - 1)
     for i in range(row - 1, len(col_values)):
         ws2.update_cell(i + 1, col, col_values[i])
-
     last_row_to_clear = len(col_values) + 1
     ws2.update_cell(last_row_to_clear, col, "")
+
+############################################
+# Експорт бази даних у Google Sheets
+############################################
 
 from db import load_users, load_applications, save_applications
 
@@ -137,6 +144,10 @@ def export_database():
         width = max_len * 10
         set_column_width(new_ws, col_range, width)
 
+############################################
+# Видалення заявки адміністратором
+############################################
+
 async def admin_remove_app_permanently(user_id: int, app_index: int):
     from db import load_applications, delete_application_from_file_entirely, save_applications
     apps = load_applications()
@@ -154,7 +165,6 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             delete_price_cell_in_table2(sheet_row, 12)
             ws = get_worksheet1()
             ws.delete_rows(sheet_row)
-
             updated_apps = load_applications()
             for u_str, user_apps in updated_apps.items():
                 for a in user_apps:
@@ -164,8 +174,11 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             save_applications(updated_apps)
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
-
     return True
+
+############################################
+# Оновлення Google Sheets з даними заявки
+############################################
 
 def update_google_sheet(data: dict) -> int:
     ws = get_worksheet1()
@@ -230,13 +243,15 @@ def update_google_sheet(data: dict) -> int:
 
     return new_row
 
-
 ############################################
-# Routes API (ComputeRouteMatrix) замість Distance Matrix
+# Routes API (ComputeRouteMatrix) та Geocoding API
 ############################################
 
 def geocode_address(address: str) -> dict:
-    """Геокодує адресу за допомогою Geocoding API і повертає словник з координатами."""
+    """
+    Геокодує адресу за допомогою Geocoding API і повертає словник з координатами (lat, lng)
+    або None, якщо геокодування не вдалося.
+    """
     geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {
         "address": address,
@@ -247,7 +262,7 @@ def geocode_address(address: str) -> dict:
         response.raise_for_status()
         result = response.json()
         if result.get("status") == "OK" and result.get("results"):
-            return result["results"][0]["geometry"]["location"]  # повертає {"lat": ..., "lng": ...}
+            return result["results"][0]["geometry"]["location"]
         else:
             logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
     except Exception as e:
@@ -255,9 +270,12 @@ def geocode_address(address: str) -> dict:
     return None
 
 def get_distance_km(region: str, district: str, city: str) -> float:
-    """Обчислює відстань між точкою з координатами (ODESSA_LAT, ODESSA_LNG)
+    """
+    Обчислює відстань між точкою з координатами (ODESSA_LAT, ODESSA_LNG)
     та місцем, яке задається як адреса (формується за областю, районом і містом).
-    Використовує спочатку Geocoding API для отримання координат адреси, а потім Routes API."""
+    Спочатку використовується Geocoding API для отримання координат адреси,
+    потім ComputeRouteMatrix API для розрахунку відстані (у метрах), яка конвертується в кілометри.
+    """
     if not GOOGLE_MAPS_API_KEY:
         return None
 
@@ -300,12 +318,15 @@ def get_distance_km(region: str, district: str, city: str) -> float:
 
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        # Задаємо FieldMask для отримання необхідних полів
+        "X-Goog-FieldMask": "duration,distance_meter,origin_index,destination_index"
     }
 
     try:
         r = requests.post(url, headers=headers, json=body, timeout=15)
         if r.status_code == 200:
+            # ComputeRouteMatrix API повертає NDJSON (newline-delimited JSON)
             lines = r.text.strip().split('\n')
             if not lines:
                 return None
@@ -314,10 +335,10 @@ def get_distance_km(region: str, district: str, city: str) -> float:
                 return None
             parsed = json.loads(data_line)
             if parsed.get("status") == "OK":
-                dist_meters = parsed.get("distanceMeters", 0)
+                dist_meters = parsed.get("distance_meter", 0)
                 return dist_meters / 1000.0
             else:
-                logging.error(f"ComputeRouteMatrix returned error: {parsed}")
+                logging.error(f"ComputeRouteMatrix повернув помилку: {parsed}")
                 return None
         else:
             logging.error(f"Routes API error: {r.status_code}, {r.text}")
@@ -325,6 +346,10 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     except Exception as e:
         logging.exception(f"Помилка Routes API: {e}")
         return None
+
+############################################
+# Парсинг прайс-листа
+############################################
 
 def parse_price_sheet():
     ws = get_worksheet2_2()
