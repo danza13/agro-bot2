@@ -18,7 +18,7 @@ from db import (
     load_applications, save_applications,
     add_application, delete_application_soft, update_application_status
 )
-from gsheet_utils import update_google_sheet, color_cell_red, color_cell_green, color_cell_yellow, delete_price_cell_in_table2
+from gsheet_utils import update_google_sheet, color_cell_red, color_cell_green, color_cell_yellow, delete_price_cell_in_table2, get_worksheet1, get_worksheet2
 
 ############################################
 # РЕЄСТРАЦІЯ КОРИСТУВАЧА (/start)
