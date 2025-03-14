@@ -313,9 +313,11 @@ async def view_application_detail(message: types.Message, state: FSMContext):
         formatted_date = dt.strftime("%d.%m.%Y")
     except:
         formatted_date = timestamp
+
     status = app.get("proposal_status", "")
     details = []
-    if status == "confirmed":
+    if status == "Agreed":
+        once_waited = app.get("onceWaited", False)
         details = [
             "<b>Детальна інформація по заявці:</b>",
             f"Дата створення: {formatted_date}",
@@ -330,10 +332,15 @@ async def view_application_detail(message: types.Message, state: FSMContext):
             f"Форма оплати: {app.get('payment_form', '')}",
             f"Валюта: {app.get('currency', '')}",
             f"Бажана ціна: {app.get('price', '')}",
-            f"Пропозиція ціни: {app.get('proposal', '—')}",
-            "Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться"
+            f"\nПропозиція ціни: {app.get('proposal', '')}"
         ]
-    else:
+        if once_waited:
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            kb.row("Підтвердити", "Редагувати заявку", "Видалити заявку")
+        else:
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            kb.row("Підтвердити", "Відхилити", "Редагувати заявку", "Видалити заявку")
+    elif status in ("active", "waiting"):
         details = [
             "<b>Детальна інформація по заявці:</b>",
             f"Дата створення: {formatted_date}",
@@ -349,27 +356,49 @@ async def view_application_detail(message: types.Message, state: FSMContext):
             f"Валюта: {app.get('currency', '')}",
             f"Бажана ціна: {app.get('price', '')}"
         ]
-    extra = app.get("extra_fields", {})
-    if extra:
-        details.append("Додаткові параметри:")
-        for key, value in extra.items():
-            details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    if status == "Agreed":
-        once_waited = app.get("onceWaited", False)
-        details.append(f"\nПропозиція ціни: {app.get('proposal', '')}")
-        if once_waited:
-            kb.row("Підтвердити", "Видалити")
-        else:
-            kb.row("Підтвердити", "Відхилити", "Видалити")
-    elif status in ("active", "waiting"):
-        kb.add("Переглянути пропозицію")
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        kb.row("Переглянути пропозицію", "Редагувати заявку", "Видалити заявку")
     elif status == "rejected":
-        kb.row("Видалити", "Очікувати")
+        details = [
+            "<b>Детальна інформація по заявці:</b>",
+            f"Дата створення: {formatted_date}",
+            f"ФГ: {app.get('fgh_name', '')}",
+            f"ЄДРПОУ: {app.get('edrpou', '')}",
+            f"Область: {app.get('region', '')}",
+            f"Район: {app.get('district', '')}",
+            f"Місто: {app.get('city', '')}",
+            f"Група: {app.get('group', '')}",
+            f"Культура: {app.get('culture', '')}",
+            f"Кількість: {app.get('quantity', '')}",
+            f"Форма оплати: {app.get('payment_form', '')}",
+            f"Валюта: {app.get('currency', '')}",
+            f"Бажана ціна: {app.get('price', '')}"
+        ]
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        kb.row("Редагувати заявку", "Видалити заявку", "Очікувати")
     elif status == "deleted":
-        details.append("\nЦя заявка вже позначена як 'deleted' (видалена).")
+        details = [
+            "<b>Детальна інформація по заявці:</b>",
+            f"Дата створення: {formatted_date}",
+            "Ця заявка вже позначена як 'deleted' (видалена)."
+        ]
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         kb.add("Назад")
-    # Додаємо кнопку "Назад", щоб повернутися до списку заявок
+        await state.update_data(selected_app_index=idx)
+        await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
+        await ApplicationStates.viewing_application.set()
+        return
+    else:
+        details = [
+            "<b>Детальна інформація по заявці:</b>",
+            f"Дата створення: {formatted_date}",
+            f"ФГ: {app.get('fgh_name', '')}",
+            f"Культура: {app.get('culture', '')}",
+            f"Кількість: {app.get('quantity', '')}"
+        ]
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        kb.row("Редагувати заявку", "Видалити заявку")
+
     kb.row("Назад")
     await state.update_data(selected_app_index=idx)
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
@@ -525,6 +554,210 @@ async def back_from_proposal_to_detail(message: types.Message, state: FSMContext
     # Відправляємо нове повідомлення з детальною інформацією
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
     await ApplicationStates.viewing_application.set()
+
+@dp.message_handler(Text(equals="Видалити заявку"), state=ApplicationStates.viewing_application)
+async def delete_request_initiate(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    idx = data.get("selected_app_index")
+    uid = str(message.from_user.id)
+    apps = load_applications()
+    user_apps = apps.get(uid, [])
+    if idx is None or idx < 0 or idx >= len(user_apps):
+        await message.answer("Невірна заявка.", reply_markup=remove_keyboard())
+        return
+    app = user_apps[idx]
+    if app.get("proposal_status") == "confirmed":
+        await message.answer("Редагування/видалення недоступне для підтверджених заявок.", reply_markup=get_main_menu_keyboard())
+        return
+    culture = app.get('culture', 'Невідомо')
+    quantity = app.get('quantity', 'Невідомо')
+    prompt = f"Ви впевнені, що хочете видалити заявку {idx+1}. {culture} | {quantity} т?"
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.row("Так", "Ні")
+    await message.answer(prompt, reply_markup=kb)
+    await state.update_data(deletion_app_index=idx)
+    await ApplicationStates.deletion_confirmation.set()
+
+@dp.message_handler(Text(equals="Ні"), state=ApplicationStates.deletion_confirmation)
+async def cancel_deletion(message: types.Message, state: FSMContext):
+    # Повертаємо користувача до попереднього перегляду заявки
+    await view_application_detail(message, state)
+    await ApplicationStates.viewing_application.set()
+
+@dp.message_handler(Text(equals="Так"), state=ApplicationStates.deletion_confirmation)
+async def confirm_deletion(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    idx = data.get("deletion_app_index") or data.get("selected_app_index")
+    if idx is None:
+        await message.answer("Не знайдено заявку для видалення.", reply_markup=get_main_menu_keyboard())
+        await state.finish()
+        return
+    update_application_status(message.from_user.id, idx, "deleted")
+    apps = load_applications()
+    uid = str(message.from_user.id)
+    app = apps[uid][idx]
+    sheet_row = app.get("sheet_row")
+    if sheet_row:
+        try:
+            ws1 = get_worksheet1()
+            ws2 = get_worksheet2()
+            color_entire_row_red(ws1, sheet_row)
+            color_entire_row_red(ws2, sheet_row)
+        except Exception as e:
+            logging.exception(f"Помилка фарбування рядка {sheet_row}: {e}")
+    save_applications(apps)
+    await message.answer("Ваша заявка видалена.", reply_markup=get_main_menu_keyboard())
+    await state.finish()
+
+@dp.message_handler(Text(equals="Редагувати заявку"), state=ApplicationStates.viewing_application)
+async def initiate_edit_request(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    idx = data.get("selected_app_index")
+    uid = str(message.from_user.id)
+    apps = load_applications()
+    user_apps = apps.get(uid, [])
+    if idx is None or idx < 0 or idx >= len(user_apps):
+        await message.answer("Невірна заявка.", reply_markup=remove_keyboard())
+        return
+    app = user_apps[idx]
+    if app.get("proposal_status") == "confirmed":
+        await message.answer("Редагування недоступне для підтверджених заявок.", reply_markup=get_main_menu_keyboard())
+        return
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.row("Редагувати заявку", "Скасувати")
+    await message.answer("Відкрийте форму для редагування.", reply_markup=kb)
+    await ApplicationStates.editing_request.set()
+
+@dp.message_handler(Text(equals="Скасувати"), state=ApplicationStates.editing_request)
+async def cancel_edit_request(message: types.Message, state: FSMContext):
+    await view_application_detail(message, state)
+    await ApplicationStates.viewing_application.set()
+@dp.message_handler(Text(equals="Редагувати заяву"), state=ApplicationStates.editing_request)
+@dp.message_handler(Text(equals="Редагувати заявку"), state=ApplicationStates.editing_request)
+async def open_edit_webapp(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    idx = data.get("selected_app_index")
+    uid = str(message.from_user.id)
+    apps = load_applications()
+    user_apps = apps.get(uid, [])
+    if idx is None or idx < 0 or idx >= len(user_apps):
+        await message.answer("Невірна заявка.", reply_markup=remove_keyboard())
+        return
+    app = user_apps[idx]
+    # Підготовка prefill – лише редаговані поля
+    prefill_data = {
+        "quantity": app.get("quantity", ""),
+        "price": app.get("price", ""),
+        "currency": app.get("currency", ""),
+        "payment_form": app.get("payment_form", "")
+    }
+    from urllib.parse import quote
+    import json
+    prefill = quote(json.dumps(prefill_data))
+    webapp_url = f"https://danza13.github.io/agro-webapp/webapp2.html?data={prefill}"
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.row(types.KeyboardButton("Відкрити форму для редагування", web_app=types.WebAppInfo(url=webapp_url)))
+    kb.row("Скасувати")
+    await message.answer("Редагуйте заявку у WebApp:", reply_markup=kb)
+    await ApplicationStates.waiting_for_edit_webapp_data.set()
+
+@dp.message_handler(content_types=types.ContentType.WEB_APP_DATA, state=ApplicationStates.waiting_for_edit_webapp_data)
+async def edit_webapp_data_handler(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    try:
+        data_str = message.web_app_data.data
+        data_dict = json.loads(data_str)
+        await state.update_data(edit_webapp_data=data_dict)
+        # Отримання поточних даних заявки для попереднього перегляду з редагованими значеннями
+        data_state = await state.get_data()
+        idx = data_state.get("selected_app_index")
+        uid = str(user_id)
+        apps = load_applications()
+        user_apps = apps.get(uid, [])
+        if idx is None or idx < 0 or idx >= len(user_apps):
+            await message.answer("Невірна заявка.", reply_markup=remove_keyboard())
+            return
+        app = user_apps[idx]
+        edited_app = app.copy()
+        edited_app["quantity"] = data_dict.get("quantity", app.get("quantity"))
+        edited_app["price"] = data_dict.get("price", app.get("price"))
+        edited_app["currency"] = data_dict.get("currency", app.get("currency"))
+        edited_app["payment_form"] = data_dict.get("payment_form", app.get("payment_form"))
+        # Формуємо попередній перегляд
+        timestamp = edited_app.get("timestamp", "")
+        try:
+            dt = datetime.fromisoformat(timestamp)
+            formatted_date = dt.strftime("%d.%m.%Y")
+        except:
+            formatted_date = timestamp
+        details = [
+            "<b>Перевірте оновлену заявку:</b>",
+            f"Дата створення: {formatted_date}",
+            f"ФГ: {edited_app.get('fgh_name', '')}",
+            f"ЄДРПОУ: {edited_app.get('edrpou', '')}",
+            f"Область: {edited_app.get('region', '')}",
+            f"Район: {edited_app.get('district', '')}",
+            f"Місто: {edited_app.get('city', '')}",
+            f"Група: {edited_app.get('group', '')}",
+            f"Культура: {edited_app.get('culture', '')}",
+            f"Кількість: {edited_app.get('quantity', '')}",
+            f"Форма оплати: {edited_app.get('payment_form', '')}",
+            f"Валюта: {edited_app.get('currency', '')}",
+            f"Бажана ціна: {edited_app.get('price', '')}"
+        ]
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        kb.row("Підтвердити", "Скасувати")
+        await message.answer("\n".join(details), parse_mode="HTML", reply_markup=kb)
+        await ApplicationStates.confirm_edited_request.set()
+    except Exception as e:
+        logging.exception(f"Помилка обробки даних редагування для user_id={user_id}: {e}")
+        await bot.send_message(user_id, "Помилка обробки даних. Спробуйте ще раз.", reply_markup=remove_keyboard())
+
+@dp.message_handler(Text(equals="Скасувати"), state=ApplicationStates.confirm_edited_request)
+async def cancel_confirm_edit(message: types.Message, state: FSMContext):
+    await view_application_detail(message, state)
+    await ApplicationStates.viewing_application.set()
+
+@dp.message_handler(Text(equals="Підтвердити"), state=ApplicationStates.confirm_edited_request)
+async def confirm_edit_request(message: types.Message, state: FSMContext):
+    data_state = await state.get_data()
+    edit_data = data_state.get("edit_webapp_data")
+    idx = data_state.get("selected_app_index")
+    uid = str(message.from_user.id)
+    if idx is None:
+        await message.answer("Невірна заявка.", reply_markup=get_main_menu_keyboard())
+        await state.finish()
+        return
+    apps = load_applications()
+    app = apps[uid][idx]
+    # Оновлюємо тільки редаговані поля
+    app["quantity"] = edit_data.get("quantity", app.get("quantity"))
+    app["price"] = edit_data.get("price", app.get("price"))
+    app["currency"] = edit_data.get("currency", app.get("currency"))
+    app["payment_form"] = edit_data.get("payment_form", app.get("payment_form"))
+    from datetime import datetime
+    edit_timestamp = datetime.now().strftime("%d.%m.%Y\n%H:%M:%S")
+    app["edit_timestamp"] = edit_timestamp
+    # Оновлюємо дані в Google Sheets – змінені клітинки фарбуються жовтим, а у таблиці2 у стовпчику N записується дата зміни
+    sheet_row = app.get("sheet_row")
+    if sheet_row:
+        try:
+            ws1 = get_worksheet1()
+            ws2 = get_worksheet2()
+            ws1.update_cell(sheet_row, 8, f"{app['quantity']} Т")
+            ws1.update_cell(sheet_row, 13, app["price"])
+            ws1.update_cell(sheet_row, 11, app["payment_form"])
+            ws1.update_cell(sheet_row, 12, app["currency"])
+            color_cell_yellow(sheet_row, col=8)
+            color_cell_yellow(sheet_row, col=11)
+            color_cell_yellow(sheet_row, col=12)
+            color_cell_yellow(sheet_row, col=13)
+            ws2.update_cell(sheet_row, 14, edit_timestamp)
+        except Exception as e:
+            logging.exception(f"Помилка оновлення Google Sheets: {e}")
+    save_applications(apps)
+    await message.answer("Заявка успішно оновлена.", reply_markup=get_main_menu_keyboard())
+    await state.finish()
 
 
 ############################################
