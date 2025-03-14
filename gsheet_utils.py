@@ -111,24 +111,11 @@ def delete_price_cell_in_table2(row: int, col: int = 12):
     logging.debug("Видалення клітинки завершено.")
 
 def color_entire_row_green(ws, row: int):
-    """
-    Застосовує зелений фон до всього рядка у вказаному аркуші (ws).
-    """
     total_columns = ws.col_count
     last_cell = rowcol_to_a1(row, total_columns)
     cell_range = f"A{row}:{last_cell}"
     format_cell_range(ws, cell_range, green_format)
     logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
-
-def color_entire_row_red(ws, row: int):
-    """
-    Застосовує червоний фон до всього рядка у вказаному аркуші (ws).
-    """
-    total_columns = ws.col_count
-    last_cell = rowcol_to_a1(row, total_columns)
-    cell_range = f"A{row}:{last_cell}"
-    format_cell_range(ws, cell_range, red_format)
-    logging.debug(f"Рядок {row} зафарбовано червоним у аркуші {ws.title}.")
 
 ############################################
 # Експорт бази даних у Google Sheets
@@ -308,23 +295,6 @@ def update_google_sheet(data: dict) -> int:
 
     logging.info(f"Дані заявки записано в рядок {new_row}.")
     return new_row
-
-############################################
-# Функції для редагування заявки в Google Sheets
-############################################
-
-def mark_edited_cells(ws, row, cols):
-    # Зафарбовує вказані стовпці у рядку жовтим
-    for col in cols:
-        cell_range = f"{rowcol_to_a1(row, col)}:{rowcol_to_a1(row, col)}"
-        format_cell_range(ws, cell_range, yellow_format)
-    logging.debug(f"Рядок {row} у стовпцях {cols} зафарбовано жовтим.")
-
-def update_edit_timestamp(ws, row, col=14):
-    # Записує поточну дату/час у форматі "дд.мм.рррр\nчч:мм:сс" у зазначену клітинку
-    timestamp = datetime.now().strftime("%d.%m.%Y\n%H:%M:%S")
-    ws.update_cell(row, col, timestamp)
-    logging.debug(f"Оновлено timestamp у рядку {row}, стовпець {col}: {timestamp}")
 
 ############################################
 # Routes API (ComputeRouteMatrix) та Geocoding API
@@ -665,3 +635,11 @@ def calculate_and_set_bot_price(app, row, price_config):
     set_bot_price_in_table2(row, final_price)
     return final_price
 
+############################################
+# Оновлення дати редагування у таблиці2
+############################################
+
+def update_edit_date_in_table2(row: int, date_str: str, col: int = 14):
+    logging.debug(f"Оновлення дати редагування в таблиці2: рядок {row}, стовпець {col}")
+    ws2 = get_worksheet2()
+    ws2.update_cell(row, col, date_str)
