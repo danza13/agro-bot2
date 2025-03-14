@@ -235,19 +235,35 @@ def update_google_sheet(data: dict) -> int:
 # Routes API (ComputeRouteMatrix) замість Distance Matrix
 ############################################
 
+def geocode_address(address: str) -> dict:
+    geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {
+        "address": address,
+        "key": GOOGLE_MAPS_API_KEY
+    }
+    response = requests.get(geocode_url, params=params, timeout=10)
+    if response.status_code == 200:
+        result = response.json()
+        if result.get("status") == "OK" and result.get("results"):
+            return result["results"][0]["geometry"]["location"]  # {'lat': ..., 'lng': ...}
+    logging.error(f"Не вдалося геокодувати адресу: {address}")
+    return None
+
 def get_distance_km(region: str, district: str, city: str) -> float:
     if not GOOGLE_MAPS_API_KEY:
         return None
 
     address = f"{city}, {district} район, {region} область, Ukraine"
-    # Описуємо запит для Routes API, метод ComputeRouteMatrix
-    # Документація: https://developers.google.com/maps/documentation/routes/reference/rest/v2/RouteMatrix
-    url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
+    # Спочатку геокодуємо адресу
+    destination_location = geocode_address(address)
+    if not destination_location:
+        return None
 
-    # Формуємо JSON для POST
-    # origins/destinations - масиви, кожен має поля location, назва, ...
-    # param travelMode="DRIVE"
-    # У Google Cloud Console треба увімкнути "Routes API".
+    dest_lat = destination_location["lat"]
+    dest_lng = destination_location["lng"]
+
+    # Формуємо запит до ComputeRouteMatrix з використанням координат
+    url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
     body = {
         "origins": [
             {
@@ -265,14 +281,16 @@ def get_distance_km(region: str, district: str, city: str) -> float:
             {
                 "waypoint": {
                     "location": {
-                        "query": address
+                        "latLng": {
+                            "latitude": dest_lat,
+                            "longitude": dest_lng
+                        }
                     }
                 }
             }
         ],
         "travelMode": "DRIVE"
     }
-
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY
@@ -281,22 +299,16 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     try:
         r = requests.post(url, headers=headers, json=body, timeout=15)
         if r.status_code == 200:
-            # computeRouteMatrix повертає stream (NDJSON), але часто requests вміє таке читати
-            # Проте, зазвичай це не JSON array, а NDJSON.  
-            # Приклад: {"originIndex":0,"destinationIndex":0,"status":"OK","distanceMeters":257686,"duration":"6850s","staticDuration":"6581s"}
             lines = r.text.strip().split('\n')
-            # Перша стрічка = JSON
             if not lines:
                 return None
             data_line = lines[0].strip()
             if not data_line:
                 return None
             parsed = json.loads(data_line)
-            # status=OK, distanceMeters
             if parsed.get("status") == "OK":
                 dist_meters = parsed.get("distanceMeters", 0)
-                dist_km = dist_meters / 1000.0
-                return dist_km
+                return dist_meters / 1000.0
             return None
         else:
             logging.error(f"Routes API error: {r.status_code}, {r.text}")
@@ -304,7 +316,6 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     except Exception as e:
         logging.exception(f"Помилка Routes API: {e}")
         return None
-
 
 def parse_price_sheet():
     ws = get_worksheet2_2()
