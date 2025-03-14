@@ -452,14 +452,79 @@ async def view_proposal(message: types.Message, state: FSMContext):
     await ApplicationStates.viewing_proposal.set()
 
 @dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_proposal)
-async def back_from_viewing_proposal(message: types.Message, state: FSMContext):
+async def back_from_proposal_to_detail(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    idx = data.get("selected_app_index")
+    if idx is None:
+        await message.answer("Немає даних для перегляду.", reply_markup=get_main_menu_keyboard())
+        await state.finish()
+        return
+
+    user_id = message.from_user.id
+    uid = str(user_id)
+    apps = load_applications()
+    user_apps = apps.get(uid, [])
+    if not user_apps or idx >= len(user_apps):
+        await message.answer("Заявку не знайдено.", reply_markup=get_main_menu_keyboard())
+        await state.finish()
+        return
+
+    app = user_apps[idx]
+    try:
+        dt = datetime.fromisoformat(app.get("timestamp", ""))
+        formatted_date = dt.strftime("%d.%m.%Y")
+    except Exception:
+        formatted_date = app.get("timestamp", "")
+
+    status = app.get("proposal_status", "")
+    details = []
+    if status == "confirmed":
+        details = [
+            "<b>Детальна інформація по заявці:</b>",
+            f"Дата створення: {formatted_date}",
+            f"ФГ: {app.get('fgh_name', '')}",
+            f"ЄДРПОУ: {app.get('edrpou', '')}",
+            f"Область: {app.get('region', '')}",
+            f"Район: {app.get('district', '')}",
+            f"Місто: {app.get('city', '')}",
+            f"Група: {app.get('group', '')}",
+            f"Культура: {app.get('culture', '')}",
+            f"Кількість: {app.get('quantity', '')}",
+            f"Форма оплати: {app.get('payment_form', '')}",
+            f"Валюта: {app.get('currency', '')}",
+            f"Бажана ціна: {app.get('price', '')}",
+            f"Пропозиція ціни: {app.get('proposal', '—')}",
+            "Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться"
+        ]
+    else:
+        details = [
+            "<b>Детальна інформація по заявці:</b>",
+            f"Дата створення: {formatted_date}",
+            f"ФГ: {app.get('fgh_name', '')}",
+            f"ЄДРПОУ: {app.get('edrpou', '')}",
+            f"Область: {app.get('region', '')}",
+            f"Район: {app.get('district', '')}",
+            f"Місто: {app.get('city', '')}",
+            f"Група: {app.get('group', '')}",
+            f"Культура: {app.get('culture', '')}",
+            f"Кількість: {app.get('quantity', '')}",
+            f"Форма оплати: {app.get('payment_form', '')}",
+            f"Валюта: {app.get('currency', '')}",
+            f"Бажана ціна: {app.get('price', '')}"
+        ]
+
+    extra = app.get("extra_fields", {})
+    if extra:
+        details.append("Додаткові параметри:")
+        for key, value in extra.items():
+            details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
+
+    # Формуємо нову клавіатуру з кнопками "Переглянути пропозицію" і "Назад"
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    # Клавіатура містить тільки кнопки "Переглянути пропозицію" і "Назад"
     kb.row("Переглянути пропозицію", "Назад")
-    # Відправляємо нове повідомлення (текст може бути невидимим, використовуючи нульову ширину)
-    await message.answer("\u200E", reply_markup=kb)
-    # Залишаємо стан незмінним або встановлюємо його знову
-    await state.set_state(ApplicationStates.viewing_proposal)
+    # Відправляємо нове повідомлення з детальною інформацією
+    await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
+    await ApplicationStates.viewing_application.set()
 
 
 ############################################
