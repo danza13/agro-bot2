@@ -31,20 +31,20 @@ def resume_polling():
 ########################################################
 async def poll_manager_proposals():
     """
-    Кожні CHECK_INTERVAL секунд:
-      1) Оновлюємо заявки, якщо manager_price змінився.
-      2) Скануємо заявки, у яких немає manager_price та bot_price,
-         і, якщо можливо, розраховуємо bot_price (через Routes API).
-         Якщо розрахунок неможливий (немає тарифу чи даних) – пропускаємо заявку.
+    Фонове завдання:
+      1) Перевіряє зміни у manager_price та розсилку нових пропозицій.
+      2) Розраховує автоматичну (ботову) ціну для заявок.
+      Дані прайс-листа (SHEET2_NAME_2) оновлюються кожні 60 секунд.
     """
     from aiogram.utils.exceptions import BotBlocked
-    price_config = parse_price_sheet()
-
     while True:
         if POLLING_PAUSED:
             await asyncio.sleep(3)
             continue
         try:
+            # Оновлюємо конфігурацію прайс-листа з SHEET2_NAME_2 кожного циклу
+            price_config = parse_price_sheet()
+
             # 1) Обробка змін manager_price
             ws = get_worksheet1()
             rows = ws.get_all_values()
@@ -138,6 +138,7 @@ async def poll_manager_proposals():
         except Exception as e:
             logging.exception(f"Помилка у фоні: {e}")
         await asyncio.sleep(CHECK_INTERVAL)
+
 
 ########################################################
 # HTTP-сервер (опційно)
