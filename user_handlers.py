@@ -250,6 +250,39 @@ async def show_user_applications(message: types.Message):
 
 @dp.message_handler(Regexp(r"^(\d+)\.\s(.+)\s\|\s(.+)\sт(?:\s✅)?$"), state="*")
 async def view_application_detail(message: types.Message, state: FSMContext):
+    # Якщо користувач натискає "Назад", повертаємо його до списку заявок (помилка 6)
+    if message.text.strip() == "Назад":
+        user_id = message.from_user.id
+        uid = str(user_id)
+        apps = load_applications()
+        user_apps = apps.get(uid, [])
+        if not user_apps:
+            await message.answer("Ви не маєте заявок.", reply_markup=get_main_menu_keyboard())
+        else:
+            buttons = []
+            for i, app in enumerate(user_apps, start=1):
+                culture = app.get('culture', 'Невідомо')
+                quantity = app.get('quantity', 'Невідомо')
+                status = app.get("proposal_status", "")
+                if status == "confirmed":
+                    btn_text = f"{i}. {culture} | {quantity} т ✅"
+                else:
+                    btn_text = f"{i}. {culture} | {quantity} т"
+                buttons.append(btn_text)
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            row = []
+            for text in buttons:
+                row.append(text)
+                if len(row) == 2:
+                    kb.row(*row)
+                    row = []
+            if row:
+                kb.row(*row)
+            kb.row("Назад")
+            await message.answer("Ваші заявки:", reply_markup=kb)
+        await state.finish()
+        return
+
     user_id = message.from_user.id
     uid = str(user_id)
     apps = load_applications()
@@ -328,19 +361,55 @@ async def view_application_detail(message: types.Message, state: FSMContext):
             kb.row("Підтвердити", "Видалити")
         else:
             kb.row("Підтвердити", "Відхилити", "Видалити")
-    elif status == "active":
-        kb.add("Переглянути пропозицію")
-    elif status == "waiting":
+    elif status in ("active", "waiting"):
         kb.add("Переглянути пропозицію")
     elif status == "rejected":
         kb.row("Видалити", "Очікувати")
     elif status == "deleted":
         details.append("\nЦя заявка вже позначена як 'deleted' (видалена).")
         kb.add("Назад")
-    kb.add("Назад")
+    kb.row("Назад")
     await state.update_data(selected_app_index=idx)
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
     await ApplicationStates.viewing_application.set()
+
+
+############################################
+# Хендлер для кнопки "Назад" у стані перегляду заявки
+# (Повертає користувача до списку заявок)
+############################################
+
+@dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_application)
+async def user_view_application_detail_back(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    uid = str(user_id)
+    apps = load_applications()
+    user_apps = apps.get(uid, [])
+    if not user_apps:
+        await message.answer("Ви не маєте заявок.", reply_markup=get_main_menu_keyboard())
+    else:
+        buttons = []
+        for i, app in enumerate(user_apps, start=1):
+            culture = app.get('culture', 'Невідомо')
+            quantity = app.get('quantity', 'Невідомо')
+            status = app.get("proposal_status", "")
+            if status == "confirmed":
+                btn_text = f"{i}. {culture} | {quantity} т ✅"
+            else:
+                btn_text = f"{i}. {culture} | {quantity} т"
+            buttons.append(btn_text)
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        row = []
+        for text in buttons:
+            row.append(text)
+            if len(row) == 2:
+                kb.row(*row)
+                row = []
+        if row:
+            kb.row(*row)
+        kb.row("Назад")
+        await message.answer("Ваші заявки:", reply_markup=kb)
+    await state.finish()
 
 
 ############################################
@@ -378,7 +447,7 @@ async def view_proposal(message: types.Message, state: FSMContext):
         await message.answer(proposal_text, reply_markup=kb)
     else:
         await message.answer("Немає актуальної пропозиції.", reply_markup=kb)
-
+    # НЕ завершувати стан, щоб кнопка "Назад" (хендлер вище) могла повернути користувача до списку заявок
 
 ############################################
 # "Відхилити" пропозицію

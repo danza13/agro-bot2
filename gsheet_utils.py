@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+#gsheet_utils.py
+>>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
 import logging
 from datetime import datetime
 import requests
@@ -16,7 +20,11 @@ from gspread_formatting import (
 )
 from gspread.utils import rowcol_to_a1
 
-from db import load_applications, save_applications
+from db import load_applications, save_applications, load_users
+
+############################################
+# Ініціалізація gspread
+############################################
 
 ############################################
 # Ініціалізація gspread
@@ -173,28 +181,58 @@ def export_database():
 ############################################
 
 async def admin_remove_app_permanently(user_id: int, app_index: int):
+<<<<<<< HEAD
+=======
+    """
+    Видаляє заявку адміністратора з файлу і таблиці.
+    При цьому polling призупиняється на 20 секунд перед відновленням.
+    """
+>>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
     logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
     from db import load_applications, delete_application_from_file_entirely, save_applications
+    from loader import pause_polling, resume_polling
+    import asyncio
+
+    # Призупиняємо polling
+    pause_polling()
+    logging.info("Polling призупинено перед видаленням заявки.")
+
     apps = load_applications()
     uid = str(user_id)
     if uid not in apps or app_index < 0 or app_index >= len(apps[uid]):
         logging.error("Не знайдено заявку для видалення.")
+<<<<<<< HEAD
+=======
+        resume_polling()
+>>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
         return False
 
     app = apps[uid][app_index]
     sheet_row = app.get("sheet_row")
     logging.debug(f"Заявка знаходиться у рядку: {sheet_row}")
 
+    # Видаляємо заявку з локального файлу
     delete_application_from_file_entirely(user_id, app_index)
     logging.debug("Заявка видалена з локального файлу.")
 
+    # Якщо визначено рядок у Google Sheets, видаляємо дані
     if sheet_row:
         try:
-            delete_price_cell_in_table2(sheet_row, 12)
+            # Видаляємо клітинки у таблиці2 для стовпців L, M, N, O (індекси 12, 13, 14, 15)
+            for col in [12, 13, 14, 15]:
+                logging.debug(f"Видалення клітинки в таблиці2: рядок {sheet_row}, стовпець {col}")
+                delete_price_cell_in_table2(sheet_row, col)
+
+            # Видаляємо рядок у worksheet1
             ws = get_worksheet1()
             ws.delete_rows(sheet_row)
+<<<<<<< HEAD
             logging.debug(f"Видалено рядок {sheet_row} у Google Sheets.")
+=======
+            logging.debug(f"Видалено рядок {sheet_row} у worksheet1.")
+>>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
 
+            # Оновлюємо sheet_row для решти заявок
             updated_apps = load_applications()
             for u_str, user_apps in updated_apps.items():
                 for a in user_apps:
@@ -205,6 +243,15 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             logging.debug("Оновлено номери рядків для заявок після видалення.")
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
+<<<<<<< HEAD
+=======
+
+    # Чекаємо 20 секунд перед відновленням polling'у
+    logging.info("Чекаємо 20 секунд перед відновленням polling'у.")
+    await asyncio.sleep(20)
+    resume_polling()
+    logging.info("Polling відновлено після видалення заявки.")
+>>>>>>> 23776a7 (Оновлення даних: додано нові файли/зміни в коді)
     return True
 
 ############################################

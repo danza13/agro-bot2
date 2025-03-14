@@ -127,7 +127,7 @@ async def poll_manager_proposals():
                         app["proposal_status"] = "Agreed"
                         culture = app.get("culture", "Невідомо")
                         quantity = app.get("quantity", "Невідомо")
-                        msg = f"Автоматична пропозиція для Вашої заявки {idx+1}. {culture} | {quantity} т: {new_price}"
+                        msg = f"З'явилася пропозиція для Вашої заявки {idx+1}. {culture} | {quantity} т: {new_price}"
                         try:
                             await bot.send_message(app.get("chat_id"), msg)
                         except BotBlocked:
