@@ -241,10 +241,12 @@ async def show_user_applications(message: types.Message, state: FSMContext):
             row = []
     if row:
         kb.row(*row)
+    # Додаємо кнопку "Назад", яка повертає до головного меню
     kb.row("Назад")
     await message.answer("Ваші заявки:", reply_markup=kb)
-    # Встановлюємо новий стан
+    # Встановлюємо стан списку заявок
     await ApplicationStates.viewing_applications.set()
+
 
 @dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_applications)
 async def back_from_viewing_applications(message: types.Message, state: FSMContext):
@@ -257,7 +259,7 @@ async def back_from_viewing_applications(message: types.Message, state: FSMConte
 
 @dp.message_handler(Regexp(r"^(\d+)\.\s(.+)\s\|\s(.+)\sт(?:\s✅)?$"), state="*")
 async def view_application_detail(message: types.Message, state: FSMContext):
-    # Якщо користувач натискає "Назад", повертаємо його до списку заявок (помилка 6)
+    # Якщо користувач натискає "Назад" – повертаємо до списку заявок
     if message.text.strip() == "Назад":
         user_id = message.from_user.id
         uid = str(user_id)
@@ -287,10 +289,10 @@ async def view_application_detail(message: types.Message, state: FSMContext):
                 kb.row(*row)
             kb.row("Назад")
             await message.answer("Ваші заявки:", reply_markup=kb)
-        # Замість state.finish() встановлюємо стан перегляду заявок
         await ApplicationStates.viewing_applications.set()
         return
 
+    # Інакше – інтерпретуємо повідомлення як вибір заявки для детального перегляду
     user_id = message.from_user.id
     uid = str(user_id)
     apps = load_applications()
@@ -311,6 +313,7 @@ async def view_application_detail(message: types.Message, state: FSMContext):
     except:
         formatted_date = timestamp
     status = app.get("proposal_status", "")
+    details = []
     if status == "confirmed":
         details = [
             "<b>Детальна інформація по заявці:</b>",
@@ -329,33 +332,22 @@ async def view_application_detail(message: types.Message, state: FSMContext):
             f"Пропозиція ціни: {app.get('proposal', '—')}",
             "Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться"
         ]
-        extra = app.get("extra_fields", {})
-        if extra:
-            details.append("Додаткові параметри:")
-            for key, value in extra.items():
-                details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        kb.add("Назад")
-        await state.update_data(selected_app_index=idx)
-        await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
-        await ApplicationStates.viewing_application.set()
-        return
-
-    details = [
-        "<b>Детальна інформація по заявці:</b>",
-        f"Дата створення: {formatted_date}",
-        f"ФГ: {app.get('fgh_name', '')}",
-        f"ЄДРПОУ: {app.get('edrpou', '')}",
-        f"Область: {app.get('region', '')}",
-        f"Район: {app.get('district', '')}",
-        f"Місто: {app.get('city', '')}",
-        f"Група: {app.get('group', '')}",
-        f"Культура: {app.get('culture', '')}",
-        f"Кількість: {app.get('quantity', '')}",
-        f"Форма оплати: {app.get('payment_form', '')}",
-        f"Валюта: {app.get('currency', '')}",
-        f"Бажана ціна: {app.get('price', '')}"
-    ]
+    else:
+        details = [
+            "<b>Детальна інформація по заявці:</b>",
+            f"Дата створення: {formatted_date}",
+            f"ФГ: {app.get('fgh_name', '')}",
+            f"ЄДРПОУ: {app.get('edrpou', '')}",
+            f"Область: {app.get('region', '')}",
+            f"Район: {app.get('district', '')}",
+            f"Місто: {app.get('city', '')}",
+            f"Група: {app.get('group', '')}",
+            f"Культура: {app.get('culture', '')}",
+            f"Кількість: {app.get('quantity', '')}",
+            f"Форма оплати: {app.get('payment_form', '')}",
+            f"Валюта: {app.get('currency', '')}",
+            f"Бажана ціна: {app.get('price', '')}"
+        ]
     extra = app.get("extra_fields", {})
     if extra:
         details.append("Додаткові параметри:")
@@ -376,6 +368,7 @@ async def view_application_detail(message: types.Message, state: FSMContext):
     elif status == "deleted":
         details.append("\nЦя заявка вже позначена як 'deleted' (видалена).")
         kb.add("Назад")
+    # Додаємо кнопку "Назад", щоб повернутися до списку заявок
     kb.row("Назад")
     await state.update_data(selected_app_index=idx)
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
@@ -417,7 +410,7 @@ async def user_view_application_detail_back(message: types.Message, state: FSMCo
             kb.row(*row)
         kb.row("Назад")
         await message.answer("Ваші заявки:", reply_markup=kb)
-    await state.finish()
+    await ApplicationStates.viewing_applications.set()
 
 
 ############################################
