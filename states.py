@@ -13,14 +13,20 @@ class ApplicationStates(StatesGroup):
     waiting_for_webapp_data = State()
     confirm_application = State()
     editing_application = State()
-    viewing_application = State()      # детальний перегляд заявки
-    viewing_applications = State()       # список заявок
-    viewing_proposal = State()           # перегляд пропозиції
+    viewing_application = State()
+    viewing_applications = State()
+    viewing_proposal = State()
     proposal_reply = State()
     confirm_deletion = State()
     waiting_for_phone_confirmation = State()
     waiting_for_price_confirmation = State()
-
+    deletion_initiation = State()
+    deletion_confirm = State()
+    editing_initiate = State()
+    editing_waiting_webapp = State()
+    editing_preview = State()
+    editing_confirm = State()
+    
 class AdminMenuStates(StatesGroup):
     choosing_section = State()
     moderation_section = State()
