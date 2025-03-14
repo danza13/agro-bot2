@@ -501,7 +501,7 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
             ws = get_worksheet1()
             rows = ws.get_all_values()
             if len(rows) <= 1:
-                await message.answer("У таблиці немає заявок.", reply_markup=get_adminRequests_menu())
+                await message.answer("У таблиці немає заявок.", reply_markup=get_admin_requests_menu())
                 return
 
             kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -701,7 +701,7 @@ async def admin_view_confirmed_app_handler(message: types.Message, state: FSMCon
     if message.text == "Назад":
         if not confirmed_apps:
             await state.finish()
-            await message.answer("Список підтверджених заявок тепер порожній.", reply_markup=get_adminRequests_menu())
+            await message.answer("Список підтверджених заявок тепер порожній.", reply_markup=get_admin_requests_menu())
             return
 
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -729,7 +729,7 @@ async def admin_view_confirmed_app_handler(message: types.Message, state: FSMCon
         if 0 <= chosen_index < len(confirmed_apps):
             confirmed_apps.pop(chosen_index)
         await state.update_data(confirmed_apps=confirmed_apps, selected_confirmed=None, chosen_confirmed_index=None)
-        await message.answer("Заявка перенесена у 'видалені'.", reply_markup=get_adminRequests_menu())
+        await message.answer("Заявка перенесена у 'видалені'.", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
     else:
         await message.answer("Оберіть «Видалити» або «Назад».")
@@ -747,7 +747,7 @@ async def admin_view_deleted_list_choice(message: types.Message, state: FSMConte
 
     if message.text == "Назад":
         if from_requests_menu:
-            await message.answer("Розділ 'Заявки':", reply_markup=get_adminRequests_menu())
+            await message.answer("Розділ 'Заявки':", reply_markup=get_admin_requests_menu())
             await AdminMenuStates.requests_section.set()
         else:
             await state.finish()
@@ -814,13 +814,13 @@ async def admin_view_deleted_app_handler(message: types.Message, state: FSMConte
     deleted_apps = data.get("deleted_apps", [])
     chosen_index = data.get("chosen_deleted_index")
     if not selected_entry or chosen_index is None:
-        await message.answer("Немає заявки для опрацювання.", reply_markup=get_adminRequests_menu())
+        await message.answer("Немає заявки для опрацювання.", reply_markup=get_admin_requests_menu())
         await state.finish()
         return
 
     if message.text == "Назад":
         if not deleted_apps:
-            await message.answer("Список видалених заявок порожній.", reply_markup=get_adminRequests_menu())
+            await message.answer("Список видалених заявок порожній.", reply_markup=get_admin_requests_menu())
             await AdminMenuStates.requests_section.set()
             return
 
@@ -850,9 +850,9 @@ async def admin_view_deleted_app_handler(message: types.Message, state: FSMConte
             if 0 <= chosen_index < len(deleted_apps):
                 deleted_apps.pop(chosen_index)
             await state.update_data(deleted_apps=deleted_apps, selected_deleted=None, chosen_deleted_index=None)
-            await message.answer("Заявку остаточно видалено з файлу та таблиць.", reply_markup=get_adminRequests_menu())
+            await message.answer("Заявку остаточно видалено з файлу та таблиць.", reply_markup=get_admin_requests_menu())
         else:
-            await message.answer("Помилка: Заявка не знайдена або вже була видалена.", reply_markup=get_adminRequests_menu())
+            await message.answer("Помилка: Заявка не знайдена або вже була видалена.", reply_markup=get_admin_requests_menu())
 
         await AdminMenuStates.requests_section.set()
     else:
@@ -866,7 +866,7 @@ async def admin_view_deleted_app_handler(message: types.Message, state: FSMConte
 @dp.message_handler(state=AdminReview.editing_applications_list)
 async def admin_select_user_for_editing(message: types.Message, state: FSMContext):
     if message.text == "Назад":
-        await message.answer("Повертаємось до меню заявок.", reply_markup=get_adminRequests_menu())
+        await message.answer("Повертаємось до меню заявок.", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
         return
 
@@ -880,7 +880,7 @@ async def admin_select_user_for_editing(message: types.Message, state: FSMContex
     from db import load_applications
     user_apps = load_applications().get(uid, [])
     if not user_apps:
-        await message.answer("Для цього користувача немає заявок.", reply_markup=get_adminRequests_menu())
+        await message.answer("Для цього користувача немає заявок.", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
         return
 
@@ -902,7 +902,7 @@ async def admin_select_application_for_editing(message: types.Message, state: FS
     uid = data.get("editing_uid")
     from db import load_applications
     if not uid:
-        await message.answer("Помилка даних.", reply_markup=get_adminRequests_menu())
+        await message.answer("Помилка даних.", reply_markup=get_admin_requests_menu())
         await state.finish()
         return
     user_apps = load_applications().get(uid, [])
@@ -957,7 +957,7 @@ async def update_app_status_via_edit(message: types.Message, state: FSMContext):
     uid = data.get("editing_uid")
     app_index = data.get("editing_app_index")
     if uid is None or app_index is None:
-        await message.answer("Помилка даних.", reply_markup=get_adminRequests_menu())
+        await message.answer("Помилка даних.", reply_markup=get_admin_requests_menu())
         await state.finish()
         return
 
@@ -968,7 +968,7 @@ async def update_app_status_via_edit(message: types.Message, state: FSMContext):
     }
     new_status = status_map.get(message.text, "")
     update_application_status(int(uid), app_index, new_status)
-    await message.answer(f"Статус заявки оновлено на '{message.text}'.", reply_markup=get_adminRequests_menu())
+    await message.answer(f"Статус заявки оновлено на '{message.text}'.", reply_markup=get_admin_requests_menu())
     # Повертаємо адміністратора до списку заявок для редагування
     await AdminReview.editing_applications_list.set()
 
@@ -979,7 +979,7 @@ async def editing_app_status_back(message: types.Message, state: FSMContext):
     uid = data.get("editing_uid")
     from db import load_applications
     if not uid:
-        await message.answer("Помилка даних.", reply_markup=get_adminRequests_menu())
+        await message.answer("Помилка даних.", reply_markup=get_admin_requests_menu())
         await state.finish()
         return
 
