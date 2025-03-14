@@ -627,19 +627,26 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
     app = apps[uid][index]
     sheet_row = app.get("sheet_row")
     if sheet_row:
-        prop = app.get("proposal", "")
-        bot_price = app.get("bot_price", None)
         try:
-            float_prop = float(prop)
-            if bot_price is not None and abs(float_prop - bot_price) < 1e-9:
-                # Якщо ціна співпадає з ціною, розрахованою ботом – фарбуємо клітинку зеленим (стовпець 13)
+            confirmed_price = float(app.get("proposal", ""))
+            bot_price = app.get("bot_price", None)
+            if bot_price is not None and abs(confirmed_price - bot_price) < 1e-9:
+                # Користувач підтвердив ціну бота:
+                # - фарбувати клітинку з ціною бота (стовпець 13) зеленим,
+                # - клітинку з менеджерською ціною (стовпець 15) очищати (біла заливка).
                 color_cell_green(sheet_row, col=13)
+                delete_price_cell_in_table2(sheet_row, col=15)
             else:
-                # Якщо ціна підтверджена від менеджера – очищаємо клітинку і встановлюємо білий фон (стовпець 13)
+                # Користувач підтвердив менеджерську ціну:
+                # - клітинку з ціною бота (стовпець 13) очищати (біла заливка),
+                # - фарбувати клітинку з менеджерською ціною (стовпець 15) зеленим.
                 delete_price_cell_in_table2(sheet_row, col=13)
+                color_cell_green(sheet_row, col=15)
         except Exception:
             delete_price_cell_in_table2(sheet_row, col=13)
+            delete_price_cell_in_table2(sheet_row, col=15)
     save_applications(apps)
+
     
     timestamp = app.get("timestamp", "")
     try:
