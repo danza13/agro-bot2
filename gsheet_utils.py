@@ -115,6 +115,14 @@ def delete_price_cell_in_table2(row: int, col: int = 12):
     ws2.update_cell(last_row_to_clear, col, "")
     logging.debug("Видалення клітинки завершено.")
 
+def color_entire_row_green(ws, row: int):
+    # ws.col_count повертає загальну кількість колонок на аркуші
+    last_cell = rowcol_to_a1(row, ws.col_count)
+    cell_range = f"A{row}:{last_cell}"
+    format_cell_range(ws, cell_range, green_format)
+    logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
+
+
 ############################################
 # Експорт бази даних у Google Sheets
 ############################################
