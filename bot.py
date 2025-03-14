@@ -56,7 +56,7 @@ async def poll_manager_proposals():
                 if not current_manager_price_str:
                     continue
 
-                # Перевіряємо, чи можемо сконвертувати менеджерську ціну в число
+                # Перетворюємо менеджерську ціну на число
                 try:
                     new_price = float(current_manager_price_str)
                 except ValueError:
@@ -75,8 +75,8 @@ async def poll_manager_proposals():
                             except ValueError:
                                 previous_price = None
 
+                            # Якщо попередньої ціни немає або вона відрізняється від нової, оновлюємо дані
                             if previous_price is None or previous_price != new_price:
-                                # Записуємо стару ціну як рядок (якщо є)
                                 app["original_manager_price"] = str(previous_price) if previous_price is not None else ""
                                 app["proposal"] = current_manager_price_str
                                 app["proposal_status"] = "Agreed"
@@ -111,14 +111,14 @@ async def poll_manager_proposals():
                     row_idx = app.get("sheet_row")
                     if not row_idx:
                         continue
-                    new_price = calculate_and_set_bot_price(app, row_idx, price_config)
-                    if new_price is not None:
-                        app["bot_price"] = float(new_price)
-                        app["proposal"] = str(new_price)
+                    bot_price_value = calculate_and_set_bot_price(app, row_idx, price_config)
+                    if bot_price_value is not None:
+                        app["bot_price"] = float(bot_price_value)
+                        app["proposal"] = str(bot_price_value)
                         app["proposal_status"] = "Agreed"
                         culture = app.get("culture", "Невідомо")
                         quantity = app.get("quantity", "Невідомо")
-                        msg = f"З'явилася пропозиція для Вашої заявки {idx+1}. {culture} | {quantity} т: {new_price}"
+                        msg = f"З'явилася пропозиція для Вашої заявки {idx+1}. {culture} | {quantity} т: {bot_price_value}"
                         try:
                             await bot.send_message(app.get("chat_id"), msg)
                         except BotBlocked:
@@ -129,6 +129,7 @@ async def poll_manager_proposals():
         except Exception as e:
             logging.exception(f"Помилка у фоні: {e}")
         await asyncio.sleep(CHECK_INTERVAL)
+
 
 
 ########################################################
