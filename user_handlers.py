@@ -448,7 +448,16 @@ async def view_proposal(message: types.Message, state: FSMContext):
         await message.answer(proposal_text, reply_markup=kb)
     else:
         await message.answer("Немає актуальної пропозиції.", reply_markup=kb)
-    # НЕ завершувати стан, щоб кнопка "Назад" (хендлер вище) могла повернути користувача до списку заявок
+    await ApplicationStates.viewing_proposal.set()
+
+@dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_proposal)
+async def back_from_viewing_proposal(message: types.Message, state: FSMContext):
+    # Повертаємо користувача до детального перегляду заявки
+    await ApplicationStates.viewing_application.set()
+    # Можна повторно відправити детальну інформацію про заявку, якщо це потрібно
+    # Наприклад, отримати дані з state і повторно викликати view_application_detail
+    # Або просто повідомити користувача, що він повертається до перегляду заявки.
+    await message.answer("Повертаємо до детального перегляду заявки.")
 
 ############################################
 # "Відхилити" пропозицію
