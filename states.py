@@ -20,9 +20,6 @@ class ApplicationStates(StatesGroup):
     confirm_deletion = State()
     waiting_for_phone_confirmation = State()
     waiting_for_price_confirmation = State()
-    deletion_confirmation = State()      # Новий стан для підтвердження видалення заявки
-    editing_request = State()            # Новий стан для редагування заявки через WebApp
-    waiting_for_edit_preview = State()   # Новий стан для перегляду попереднього варіанту редагованої заявки
 
 class AdminMenuStates(StatesGroup):
     choosing_section = State()
