@@ -5,7 +5,7 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text, Regexp
 
-from loader import dp, bot, pause_polling, resume_polling
+from loader import dp, bot
 from config import ADMINS
 from states import AdminMenuStates, AdminReview
 from keyboards import (
