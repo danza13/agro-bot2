@@ -131,6 +131,12 @@ def color_entire_row_green(ws, row: int):
     format_cell_range(ws, cell_range, green_format)
     logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
 
+def color_entire_row_red(ws, row: int):
+    total_columns = ws.col_count
+    last_cell = rowcol_to_a1(row, total_columns)
+    cell_range = f"A{row}:{last_cell}"
+    format_cell_range(ws, cell_range, red_format)
+    logging.debug(f"Рядок {row} зафарбовано червоним у аркуші {ws.title}.")
 
 ############################################
 # Експорт бази даних у Google Sheets
