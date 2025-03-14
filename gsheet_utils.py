@@ -270,17 +270,13 @@ def geocode_address(address: str) -> dict:
     return None
 
 def get_distance_km(region: str, district: str, city: str) -> float:
-    """
-    Обчислює відстань між точкою з координатами (ODESSA_LAT, ODESSA_LNG)
-    та місцем, яке задається адресою (формується за областю, районом і містом).
-    Спочатку використовується Geocoding API для отримання координат адреси,
-    а потім ComputeRouteMatrix API для розрахунку відстані (у метрах), яка конвертується в кілометри.
-    """
     if not GOOGLE_MAPS_API_KEY:
         return None
 
-    # Формуємо адресу
+    # Формуємо адресу за областю, районом та містом
     address = f"{city}, {district} район, {region} область, Ukraine"
+
+    # Спочатку отримуємо координати адреси через Geocoding API
     destination_location = geocode_address(address)
     if not destination_location:
         return None
@@ -288,7 +284,6 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     dest_lat = destination_location["lat"]
     dest_lng = destination_location["lng"]
 
-    # Формуємо запит до ComputeRouteMatrix API
     url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
     body = {
         "origins": [
@@ -321,7 +316,6 @@ def get_distance_km(region: str, district: str, city: str) -> float:
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-        # Вказуємо FieldMask для отримання необхідних полів
         "X-Goog-FieldMask": "duration,distanceMeters,originIndex,destinationIndex"
     }
 
@@ -331,7 +325,6 @@ def get_distance_km(region: str, district: str, city: str) -> float:
         response_text = r.text.strip()
         parsed = None
 
-        # Якщо відповідь починається з "[" – спробуємо обробити її як JSON-масив
         if response_text.startswith("["):
             try:
                 json_array = json.loads(response_text)
@@ -340,7 +333,6 @@ def get_distance_km(region: str, district: str, city: str) -> float:
             except Exception as e:
                 logging.error(f"Помилка розбору JSON-масиву: {e}")
         else:
-            # Якщо це NDJSON – розбиваємо за рядками та намагаємося розпарсити кожен рядок
             lines = response_text.split('\n')
             for line in lines:
                 try:
@@ -354,7 +346,8 @@ def get_distance_km(region: str, district: str, city: str) -> float:
         if not parsed:
             return None
 
-        if parsed.get("status") == "OK":
+        # Замість перевірки "status", перевіряємо, чи міститься поле "distanceMeters"
+        if "distanceMeters" in parsed:
             dist_meters = parsed.get("distanceMeters", 0)
             return dist_meters / 1000.0
         else:
