@@ -214,7 +214,7 @@ async def start_application(message: types.Message, state: FSMContext):
 
 
 @dp.message_handler(Text(equals="Переглянути мої заявки"), state="*")
-async def show_user_applications(message: types.Message):
+async def show_user_applications(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     uid = str(user_id)
     apps = load_applications()
@@ -243,6 +243,13 @@ async def show_user_applications(message: types.Message):
         kb.row(*row)
     kb.row("Назад")
     await message.answer("Ваші заявки:", reply_markup=kb)
+    # Встановлюємо новий стан
+    await ApplicationStates.viewing_applications.set()
+
+@dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_applications)
+async def back_from_viewing_applications(message: types.Message, state: FSMContext):
+    await state.finish()
+    await message.answer("Головне меню:", reply_markup=get_main_menu_keyboard())
 
 ############################################
 # Детальний перегляд заявки
