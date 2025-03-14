@@ -265,7 +265,7 @@ def get_distance_km(region: str, district: str, city: str) -> float:
             {
                 "waypoint": {
                     "location": {
-                        "address": address
+                        "query": address
                     }
                 }
             }
