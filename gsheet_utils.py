@@ -12,11 +12,14 @@ from config import (
 )
 from oauth2client.service_account import ServiceAccountCredentials
 from gspread_formatting import (
-    format_cell_range, cellFormat, Color, set_column_width, CellFormat, TextFormat
+    format_cell_range, cellFormat, Color,
+    set_column_width, CellFormat, TextFormat
 )
 from gspread.utils import rowcol_to_a1
 
 from db import load_applications, save_applications, load_users
+from loader import pause_polling, resume_polling
+import asyncio
 
 ############################################
 # Ініціалізація gspread
@@ -69,62 +72,51 @@ def ensure_columns(ws, required_col: int):
 # Форматування клітинок
 ############################################
 
-red_format = cellFormat(backgroundColor=Color(1, 0.8, 0.8))
-green_format = cellFormat(backgroundColor=Color(0.8, 1, 0.8))
-yellow_format = cellFormat(backgroundColor=Color(1, 1, 0.8))
+red_format = cellFormat(backgroundColor=Color(1, 0.0, 0.0))      # #ff0000
+green_format = cellFormat(backgroundColor=Color(0.8, 1, 0.8))    # близько #ccffcc
+yellow_format = cellFormat(backgroundColor=Color(1, 1, 0.6))     # #ffff99 або подібне
 
 def color_price_cell_in_table2(row: int, fmt: cellFormat, col: int = 12):
-    logging.debug(f"Застосування форматування до клітинки (рядок {row}, стовпець {col})")
     ws2 = get_worksheet2()
     cell_range = f"{rowcol_to_a1(row, col)}:{rowcol_to_a1(row, col)}"
     format_cell_range(ws2, cell_range, fmt)
 
 def color_cell_red(row: int, col: int = 12):
-    logging.debug(f"Зафарбування клітинки червоним (рядок {row}, стовпець {col})")
     color_price_cell_in_table2(row, red_format, col)
 
 def color_cell_green(row: int, col: int = 12):
-    logging.debug(f"Зафарбування клітинки зеленим (рядок {row}, стовпець {col})")
     color_price_cell_in_table2(row, green_format, col)
 
 def color_cell_yellow(row: int, col: int = 12):
-    logging.debug(f"Зафарбування клітинки жовтим (рядок {row}, стовпець {col})")
     color_price_cell_in_table2(row, yellow_format, col)
 
 def delete_price_cell_in_table2(row: int, col: int = 12):
-    logging.debug(f"Видалення значення та форматування клітинки (рядок {row}, стовпець {col}) у таблиці2")
     ws2 = get_worksheet2()
+    # Скидаємо фон на білий
     format_cell_range(
         ws2,
-        f"{rowcol_to_a1(row, col)}:{rowcol_to_a1(ws2.row_count, col)}",
+        f"{rowcol_to_a1(row, col)}:{rowcol_to_a1(row, col)}",
         cellFormat(backgroundColor=Color(1, 1, 1))
     )
-    col_values = ws2.col_values(col)
-    if row - 1 >= len(col_values):
-        logging.warning("Рядок для видалення перевищує кількість заповнених рядків.")
-        return
-    col_values.pop(row - 1)
-    for i in range(row - 1, len(col_values)):
-        ws2.update_cell(i + 1, col, col_values[i])
-    last_row_to_clear = len(col_values) + 1
-    ws2.update_cell(last_row_to_clear, col, "")
-    logging.debug("Видалення клітинки завершено.")
+    # Видаляємо значення у самій клітинці
+    ws2.update_cell(row, col, "")
 
 def color_entire_row_green(ws, row: int):
-    """
-    Застосовує зелений фон до всього рядка у вказаному аркуші (ws).
-    Форматування встановлюється для діапазону від першої до останньої клітинки рядка.
-    При цьому, якщо дані зміщуються (наприклад, після видалення рядка),
-    форматування також «пересувається» разом із рядком.
-    """
     total_columns = ws.col_count
     last_cell = rowcol_to_a1(row, total_columns)
     cell_range = f"A{row}:{last_cell}"
     format_cell_range(ws, cell_range, green_format)
     logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
 
+def color_entire_row_red(ws, row: int):
+    total_columns = ws.col_count
+    last_cell = rowcol_to_a1(row, total_columns)
+    cell_range = f"A{row}:{last_cell}"
+    format_cell_range(ws, cell_range, red_format)
+    logging.debug(f"Рядок {row} зафарбовано червоним у аркуші {ws.title}.")
+
 ############################################
-# Експорт бази даних у Google Sheets
+# Експорт бази користувачів (адмін-розділ) — без змін
 ############################################
 
 def export_database():
@@ -182,14 +174,12 @@ def export_database():
     logging.info("Експорт бази даних завершено.")
 
 ############################################
-# Видалення заявки адміністратором
+# Видалення заявки адміністратором (не змінюємо логіку)
 ############################################
 
 async def admin_remove_app_permanently(user_id: int, app_index: int):
-    logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
     from db import load_applications, delete_application_from_file_entirely, save_applications
-    from loader import pause_polling, resume_polling
-    import asyncio
+    logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
 
     pause_polling()
     logging.info("Polling призупинено перед видаленням заявки.")
@@ -213,9 +203,8 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             ws2 = get_worksheet2()
             ws2.delete_rows(sheet_row)
             logging.debug(f"Видалено рядок {sheet_row} у таблиці2.")
-            
             await asyncio.sleep(3)
-            
+
             ws1 = get_worksheet1()
             ws1.delete_rows(sheet_row)
             logging.debug(f"Видалено рядок {sheet_row} у таблиці1.")
@@ -239,7 +228,7 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
     return True
 
 ############################################
-# Оновлення Google Sheets з даними заявки
+# Оновлення Google Sheets з даними заявки (додавання)
 ############################################
 
 def update_google_sheet(data: dict) -> int:
@@ -294,7 +283,7 @@ def update_google_sheet(data: dict) -> int:
 
     ws.update_cell(new_row, 11, data.get("payment_form", ""))
 
-    currency_map = {"dollar": "Долар $", "euro": "Євро €", "uah": "Грн ₴"}
+    currency_map = {"dollar": "Долар", "euro": "Євро", "uah": "Грн"}
     curr = data.get("currency", "").lower()
     ws.update_cell(new_row, 12, currency_map.get(curr, data.get("currency", "")))
     ws.update_cell(new_row, 13, data.get("price", ""))
@@ -307,128 +296,7 @@ def update_google_sheet(data: dict) -> int:
     return new_row
 
 ############################################
-# Routes API (ComputeRouteMatrix) та Geocoding API
-############################################
-
-def geocode_address(address: str) -> dict:
-    logging.debug(f"Геокодування адреси: {address}")
-    geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
-    params = {
-        "address": address,
-        "key": GOOGLE_MAPS_API_KEY
-    }
-    try:
-        response = requests.get(geocode_url, params=params, timeout=10)
-        response.raise_for_status()
-        result = response.json()
-        logging.debug(f"Отримано результат геокодування: {result}")
-        if result.get("status") == "OK" and result.get("results"):
-            loc = result["results"][0]["geometry"]["location"]
-            logging.info(f"Адресу {address} геокодовано: {loc}")
-            return loc
-        else:
-            logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
-    except Exception as e:
-        logging.exception(f"Помилка геокодування адреси: {address} - {e}")
-    return None
-
-def get_distance_km(region: str, district: str, city: str) -> float:
-    logging.info(f"Обчислення відстані для адреси: {city}, {district} район, {region} область, Ukraine")
-    if not GOOGLE_MAPS_API_KEY:
-        logging.error("Відсутній GOOGLE_MAPS_API_KEY")
-        return None
-
-    address = f"{city}, {district} район, {region} область, Ukraine"
-    destination_location = geocode_address(address)
-    if not destination_location:
-        logging.error("Не вдалося отримати координати цільової адреси.")
-        return None
-
-    dest_lat = destination_location["lat"]
-    dest_lng = destination_location["lng"]
-    logging.debug(f"Координати цільової адреси: lat={dest_lat}, lng={dest_lng}")
-
-    url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
-    body = {
-        "origins": [
-            {
-                "waypoint": {
-                    "location": {
-                        "latLng": {
-                            "latitude": ODESSA_LAT,
-                            "longitude": ODESSA_LNG
-                        }
-                    }
-                }
-            }
-        ],
-        "destinations": [
-            {
-                "waypoint": {
-                    "location": {
-                        "latLng": {
-                            "latitude": dest_lat,
-                            "longitude": dest_lng
-                        }
-                    }
-                }
-            }
-        ],
-        "travelMode": "DRIVE"
-    }
-    logging.debug(f"Тіло запиту до Routes API: {json.dumps(body)}")
-
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": "duration,distanceMeters,originIndex,destinationIndex"
-    }
-    logging.debug(f"Заголовки запиту: {headers}")
-
-    try:
-        r = requests.post(url, headers=headers, json=body, timeout=15)
-        r.raise_for_status()
-        response_text = r.text.strip()
-        logging.debug(f"Відповідь від Routes API: {response_text}")
-
-        parsed = None
-        if response_text.startswith("["):
-            try:
-                json_array = json.loads(response_text)
-                if isinstance(json_array, list) and len(json_array) > 0:
-                    parsed = json_array[0]
-                    logging.debug("Відповідь розпарсовано як JSON-масив.")
-            except Exception as e:
-                logging.error(f"Помилка розбору JSON-масиву: {e}")
-        else:
-            for line in response_text.split('\n'):
-                try:
-                    parsed = json.loads(line)
-                    if parsed is not None:
-                        logging.debug("Відповідь розпарсовано з NDJSON.")
-                        break
-                except json.JSONDecodeError as e:
-                    logging.error(f"JSON decode error for line: {line} - {e}")
-                    continue
-
-        if not parsed:
-            logging.error("Не вдалося розпарсити відповідь від ComputeRouteMatrix.")
-            return None
-
-        if "distanceMeters" in parsed:
-            dist_meters = parsed.get("distanceMeters", 0)
-            dist_km = dist_meters / 1000.0
-            logging.info(f"Обчислена відстань: {dist_km} км")
-            return dist_km
-        else:
-            logging.error(f"ComputeRouteMatrix повернув помилку: {parsed}")
-            return None
-    except Exception as e:
-        logging.exception(f"Помилка Routes API: {e}")
-        return None
-
-############################################
-# Парсинг прайс-листа
+# Авто-розрахунок ціни після редагування
 ############################################
 
 def parse_price_sheet():
@@ -545,9 +413,115 @@ def parse_price_sheet():
         "blocks": blocks
     }
 
+def geocode_address(address: str) -> dict:
+    geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {
+        "address": address,
+        "key": GOOGLE_MAPS_API_KEY
+    }
+    try:
+        response = requests.get(geocode_url, params=params, timeout=10)
+        response.raise_for_status()
+        result = response.json()
+        if result.get("status") == "OK" and result.get("results"):
+            loc = result["results"][0]["geometry"]["location"]
+            return loc
+        else:
+            logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
+    except Exception as e:
+        logging.exception(f"Помилка геокодування адреси: {address} - {e}")
+    return None
+
+def get_distance_km(region: str, district: str, city: str) -> float:
+    if not GOOGLE_MAPS_API_KEY:
+        logging.error("Відсутній GOOGLE_MAPS_API_KEY")
+        return None
+
+    address = f"{city}, {district} район, {region} область, Ukraine"
+    destination_location = geocode_address(address)
+    if not destination_location:
+        return None
+
+    dest_lat = destination_location["lat"]
+    dest_lng = destination_location["lng"]
+
+    url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
+    body = {
+        "origins": [
+            {
+                "waypoint": {
+                    "location": {
+                        "latLng": {
+                            "latitude": ODESSA_LAT,
+                            "longitude": ODESSA_LNG
+                        }
+                    }
+                }
+            }
+        ],
+        "destinations": [
+            {
+                "waypoint": {
+                    "location": {
+                        "latLng": {
+                            "latitude": dest_lat,
+                            "longitude": dest_lng
+                        }
+                    }
+                }
+            }
+        ],
+        "travelMode": "DRIVE"
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": "duration,distanceMeters,originIndex,destinationIndex"
+    }
+
+    try:
+        r = requests.post(url, headers=headers, json=body, timeout=15)
+        r.raise_for_status()
+        response_text = r.text.strip()
+
+        parsed = None
+        # Спроба парсити NDJSON
+        if response_text.startswith("["):
+            # Можливо, це звичайний масив
+            try:
+                json_array = json.loads(response_text)
+                if isinstance(json_array, list) and len(json_array) > 0:
+                    parsed = json_array[0]
+            except Exception as e:
+                logging.error(f"Помилка розбору JSON-масиву: {e}")
+        else:
+            for line in response_text.split('\n'):
+                try:
+                    p = json.loads(line)
+                    if p is not None:
+                        parsed = p
+                        break
+                except json.JSONDecodeError as e:
+                    continue
+
+        if not parsed:
+            logging.error("Не вдалося розпарсити відповідь від ComputeRouteMatrix.")
+            return None
+
+        dist_meters = parsed.get("distanceMeters", 0)
+        dist_km = dist_meters / 1000.0
+        return dist_km
+    except Exception as e:
+        logging.exception(f"Помилка Routes API: {e}")
+        return None
+
 def find_tariff_for_distance(distance_km, distance_data, currency_str):
-    logging.debug(f"Пошук тарифу для відстані {distance_km} км та валюти {currency_str}")
+    """
+    Шукаємо тариф (перевезення) для відстані та валюти
+    distance_data – список tuples: (dist_min, dist_max, tarif_grn, tarif_usd, tarif_eur)
+    """
     cur_index = 0
+    # currency_str -> "грн"|"долар"|"євро"
     if currency_str == "грн":
         cur_index = 2
     elif currency_str == "долар":
@@ -555,50 +529,45 @@ def find_tariff_for_distance(distance_km, distance_data, currency_str):
     elif currency_str == "євро":
         cur_index = 4
     else:
-        logging.error(f"Невідома валюта: {currency_str}")
         return None
 
     for (dmin, dmax, tg, tu, te) in distance_data:
         if distance_km >= dmin and distance_km < dmax:
             arr = [tg, tu, te]
             val = arr[cur_index - 2]
-            logging.debug(f"Тариф для цього діапазону: {val}")
             return val
-    logging.error("Не знайдено тариф для заданої відстані.")
     return None
 
 def find_price_in_block(currency_str, group_str, culture_str, pay_form, blocks):
-    logging.debug(f"Пошук ціни для валюти: {currency_str}, групи: {group_str}, культури: {culture_str}, форми оплати: {pay_form}")
+    """
+    Шукаємо базову ціну по культурі/групі/валюті/формі оплати
+    """
     cur = currency_str.lower()
     grp = group_str.lower()
     cul = culture_str.lower()
     pay = pay_form.lower()
 
     if cur not in blocks:
-        logging.error(f"Не знайдено блок для валюти: {cur}")
         return None
     if grp not in blocks[cur]:
-        logging.error(f"Не знайдено групу: {grp} у валюті {cur}")
         return None
     if cul not in blocks[cur][grp]:
-        logging.error(f"Не знайдено культуру: {cul} у групі {grp} валюті {cur}")
         return None
 
     pay_dict = blocks[cur][grp][cul]
     if pay not in pay_dict:
-        logging.error(f"Не знайдено форму оплати: {pay} для культури: {cul}")
         return None
-    price = pay_dict[pay]
-    logging.debug(f"Знайдена ціна: {price}")
-    return price
+
+    return pay_dict[pay]
 
 def set_bot_price_in_table2(row: int, price):
-    logging.info(f"Запис розрахованої ціни {price} у таблицю2, рядок {row}, стовпець 13")
     ws2 = get_worksheet2()
     ws2.update_cell(row, 13, price)
 
 def calculate_and_set_bot_price(app, row, price_config):
-    logging.info("Розрахунок автоматичної ціни для заявки.")
+    """
+    Спроба розрахувати ціну від бота (якщо в таблиці не вказано manager_price).
+    """
     region = app.get("region", "").strip()
     district = app.get("district", "").strip()
     city = app.get("city", "").strip()
@@ -606,6 +575,7 @@ def calculate_and_set_bot_price(app, row, price_config):
     culture_str = app.get("culture", "").strip()
     payment_str = app.get("payment_form", "").strip()
     currency_str = app.get("currency", "").lower().strip()
+
     if currency_str == "uah":
         currency_str = "грн"
     elif currency_str == "dollar":
@@ -613,43 +583,120 @@ def calculate_and_set_bot_price(app, row, price_config):
     elif currency_str == "euro":
         currency_str = "євро"
 
-    logging.debug(f"Параметри заявки: регіон={region}, район={district}, місто={city}, "
-                  f"група={group_str}, культура={culture_str}, форма оплати={payment_str}, валюта={currency_str}")
-
-    # Перевірка наявності всіх необхідних даних
     if not (region and district and city and group_str and culture_str and payment_str and currency_str):
-        logging.error("Не вистачає обов'язкових даних для розрахунку ціни.")
         return None
 
     blocks = price_config["blocks"]
-
-    # Спочатку перевіряємо, чи є у прайс‑листі співпадаючий запис, тобто базова ціна
     base_price = find_price_in_block(currency_str, group_str, culture_str, payment_str, blocks)
     if base_price is None:
-        logging.error("Відсутня базова ціна в прайс-листі для даної заявки – розрахунок не можливий.")
         return None
 
-    # Лише якщо базова ціна знайдена, проводимо запит до Routes API для отримання відстані
     dist_km = get_distance_km(region, district, city)
     if dist_km is None:
-        logging.error("Не вдалося отримати відстань для заявки.")
         return None
-    logging.info(f"Відстань для заявки: {dist_km} км")
 
     distance_data = price_config["distance_ranges"]
-
     tariff_value = find_tariff_for_distance(dist_km, distance_data, currency_str)
     if tariff_value is None:
-        logging.error("Не знайдено тариф для заданої відстані.")
         return None
 
     final_price = base_price - tariff_value
     if final_price < 0:
         final_price = 0
 
-    if final_price == int(final_price):
+    if abs(final_price - int(final_price)) < 1e-6:
         final_price = int(final_price)
 
-    logging.info(f"Розрахована ціна: {final_price} (базова ціна {base_price} - тариф {tariff_value})")
     set_bot_price_in_table2(row, final_price)
     return final_price
+
+############################################
+# Нові функції для часткового редагування
+############################################
+
+def update_worksheet1_cells_for_edit(row: int, changed_fields: dict):
+    """
+    Оновлюємо тільки ті клітинки в Worksheet1, які були змінені користувачем:
+    - quantity -> колонка 8 (з підписом "XYZ Т")
+    - price -> колонка 13
+    - currency -> колонка 12
+    - payment_form -> колонка 11
+    Після оновлення фарбуємо їх у жовтий колір (#ffff00).
+    """
+    ws = get_worksheet1()
+
+    # Словник для відображення поля -> (col_index, функція форматування)
+    field_map = {
+        "quantity": 8,
+        "payment_form": 11,
+        "currency": 12,
+        "price": 13
+    }
+
+    for key, val in changed_fields.items():
+        if key not in field_map:
+            continue
+        col_index = field_map[key]
+
+        # Якщо quantity, треба додати " Т"
+        if key == "quantity":
+            if val:
+                val = f"{val} Т"
+            ws.update_cell(row, col_index, val)
+        else:
+            ws.update_cell(row, col_index, val)
+
+        cell_range = f"{rowcol_to_a1(row, col_index)}:{rowcol_to_a1(row, col_index)}"
+        format_cell_range(ws, cell_range, yellow_format)
+
+async def re_run_autocalc_for_app(uid: str, index: int):
+    """
+    Після редагування заявки перезапустити логіку:
+    - Якщо manager_price вже встановлена, пропускаємо
+    - Якщо заявка уже confirmed/deleted/Agreed, теж пропускаємо
+    - Якщо ботова ціна вже була виставлена раніше, але дані змінились — перезаписати
+    """
+    apps = load_applications()
+    user_apps = apps.get(uid, [])
+    if index < 0 or index >= len(user_apps):
+        return
+
+    app = user_apps[index]
+    status = app.get("proposal_status", "active")
+    if status in ("deleted", "confirmed"):
+        return
+
+    manager_price_in_sheet = app.get("original_manager_price", "").strip()
+    if manager_price_in_sheet:
+        return  # Якщо менеджер уже задав ціну, не чіпаємо
+
+    # Якщо вже була встановлена ботова ціна, треба перевизначити
+    # (Видаляємо стару bot_price, щоб розрахувати заново)
+    if "bot_price" in app:
+        del app["bot_price"]
+
+    row_idx = app.get("sheet_row", None)
+    if not row_idx:
+        return
+
+    price_config = parse_price_sheet()
+    new_bot_price = calculate_and_set_bot_price(app, row_idx, price_config)
+    if new_bot_price is not None:
+        app["bot_price"] = float(new_bot_price)
+        app["proposal"] = str(new_bot_price)
+        app["proposal_status"] = "Agreed"
+
+        # Спробуємо відправити повідомлення користувачу, що з'явилася нова ціна
+        chat_id = app.get("chat_id")
+        if chat_id:
+            culture = app.get("culture", "Невідомо")
+            quantity = app.get("quantity", "Невідомо")
+            msg = f"Після редагування даних сформована нова пропозиція для Вашої заявки: {new_bot_price}\n({culture}, {quantity})"
+            try:
+                await asyncio.sleep(1)  # Легка затримка, щоб не було «хвилею»
+                from loader import bot
+                await bot.send_message(chat_id, msg)
+            except Exception as e:
+                logging.exception(f"Помилка відправки повідомлення про нову ботову ціну: {e}")
+
+    save_applications(apps)
