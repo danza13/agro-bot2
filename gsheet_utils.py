@@ -1,4 +1,3 @@
-#gsheet_utils.py
 import logging
 from datetime import datetime
 import requests
@@ -18,10 +17,6 @@ from gspread_formatting import (
 from gspread.utils import rowcol_to_a1
 
 from db import load_applications, save_applications, load_users
-
-############################################
-# Ініціалізація gspread
-############################################
 
 ############################################
 # Ініціалізація gspread
@@ -122,15 +117,11 @@ def color_entire_row_green(ws, row: int):
     При цьому, якщо дані зміщуються (наприклад, після видалення рядка),
     форматування також «пересувається» разом із рядком.
     """
-    # Отримуємо загальну кількість колонок на аркуші
     total_columns = ws.col_count
-    # Обчислюємо адресу останньої клітинки (наприклад, для 26 колонок це буде "Z")
     last_cell = rowcol_to_a1(row, total_columns)
     cell_range = f"A{row}:{last_cell}"
-    # Використовуємо green_format, який вже визначено (фон із значенням Color(0.8, 1, 0.8))
     format_cell_range(ws, cell_range, green_format)
     logging.debug(f"Рядок {row} зафарбовано зеленим у аркуші {ws.title}.")
-
 
 ############################################
 # Експорт бази даних у Google Sheets
@@ -166,8 +157,8 @@ def export_database():
             except Exception as e:
                 logging.error(f"Помилка форматування дати: {e}")
                 last_timestamp = ts
-        row = [uid, info.get("fullname", ""), info.get("phone", ""), last_timestamp, count_apps]
-        data_matrix.append(row)
+        row_data = [uid, info.get("fullname", ""), info.get("phone", ""), last_timestamp, count_apps]
+        data_matrix.append(row_data)
 
     end_row = len(data_matrix)
     cell_range = f"A1:E{end_row}"
@@ -195,17 +186,11 @@ def export_database():
 ############################################
 
 async def admin_remove_app_permanently(user_id: int, app_index: int):
-    """
-    Видаляє заявку адміністратора з файлу та з обох таблиць (worksheet1 та worksheet2).
-    Призупиняє polling, видаляє заявку, видаляє рядки у таблицях з затримкою між ними,
-    оновлює індекси рядків, після затримки відновлює polling.
-    """
     logging.info(f"Адміністратор видаляє заявку: user_id={user_id}, app_index={app_index}")
     from db import load_applications, delete_application_from_file_entirely, save_applications
     from loader import pause_polling, resume_polling
     import asyncio
 
-    # Призупиняємо polling
     pause_polling()
     logging.info("Polling призупинено перед видаленням заявки.")
 
@@ -220,27 +205,21 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
     sheet_row = app.get("sheet_row")
     logging.debug(f"Заявка знаходиться у рядку: {sheet_row}")
 
-    # Видаляємо заявку з локального файлу
     delete_application_from_file_entirely(user_id, app_index)
     logging.debug("Заявка видалена з локального файлу.")
 
-    # Якщо визначено рядок у Google Sheets, видаляємо дані
     if sheet_row:
         try:
-            # Видаляємо рядок у таблиці2 (ws2)
             ws2 = get_worksheet2()
             ws2.delete_rows(sheet_row)
             logging.debug(f"Видалено рядок {sheet_row} у таблиці2.")
             
-            # Затримка 3 секунди перед видаленням у таблиці1
             await asyncio.sleep(3)
             
-            # Видаляємо рядок у таблиці1 (ws1)
             ws1 = get_worksheet1()
             ws1.delete_rows(sheet_row)
             logging.debug(f"Видалено рядок {sheet_row} у таблиці1.")
 
-            # Оновлюємо sheet_row для решти заявок (якщо рядки зміщуються)
             updated_apps = load_applications()
             for u_str, user_apps in updated_apps.items():
                 for a in user_apps:
@@ -253,7 +232,6 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
 
-    # Чекаємо 20 секунд перед відновленням polling'у
     logging.info("Чекаємо 20 секунд перед відновленням polling'у.")
     await asyncio.sleep(20)
     resume_polling()
@@ -333,7 +311,6 @@ def update_google_sheet(data: dict) -> int:
 ############################################
 
 def geocode_address(address: str) -> dict:
-    """Геокодує адресу за допомогою Geocoding API і повертає словник з координатами (lat, lng)."""
     logging.debug(f"Геокодування адреси: {address}")
     geocode_url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {
@@ -348,7 +325,7 @@ def geocode_address(address: str) -> dict:
         if result.get("status") == "OK" and result.get("results"):
             loc = result["results"][0]["geometry"]["location"]
             logging.info(f"Адресу {address} геокодовано: {loc}")
-            return loc  # повертає {"lat": ..., "lng": ...}
+            return loc
         else:
             logging.error(f"Не вдалося геокодувати адресу: {address}, статус: {result.get('status')}")
     except Exception as e:
@@ -356,17 +333,11 @@ def geocode_address(address: str) -> dict:
     return None
 
 def get_distance_km(region: str, district: str, city: str) -> float:
-    """
-    Обчислює відстань між початковою точкою (координати Одеси, ODESSA_LAT, ODESSA_LNG)
-    та адресою, що формується за областю, районом і містом, використовуючи спочатку Geocoding API
-    для отримання координат цільової адреси, а потім ComputeRouteMatrix API (Routes API) для розрахунку відстані.
-    """
     logging.info(f"Обчислення відстані для адреси: {city}, {district} район, {region} область, Ukraine")
     if not GOOGLE_MAPS_API_KEY:
         logging.error("Відсутній GOOGLE_MAPS_API_KEY")
         return None
 
-    # Формуємо адресу
     address = f"{city}, {district} район, {region} область, Ukraine"
     destination_location = geocode_address(address)
     if not destination_location:
@@ -628,13 +599,13 @@ def set_bot_price_in_table2(row: int, price):
 
 def calculate_and_set_bot_price(app, row, price_config):
     logging.info("Розрахунок автоматичної ціни для заявки.")
-    region = app.get("region", "")
-    district = app.get("district", "")
-    city = app.get("city", "")
-    group_str = app.get("group", "")
-    culture_str = app.get("culture", "")
-    payment_str = app.get("payment_form", "")
-    currency_str = app.get("currency", "").lower()
+    region = app.get("region", "").strip()
+    district = app.get("district", "").strip()
+    city = app.get("city", "").strip()
+    group_str = app.get("group", "").strip()
+    culture_str = app.get("culture", "").strip()
+    payment_str = app.get("payment_form", "").strip()
+    currency_str = app.get("currency", "").lower().strip()
     if currency_str == "uah":
         currency_str = "грн"
     elif currency_str == "dollar":
@@ -642,8 +613,23 @@ def calculate_and_set_bot_price(app, row, price_config):
     elif currency_str == "euro":
         currency_str = "євро"
 
-    logging.debug(f"Параметри заявки: регіон={region}, район={district}, місто={city}, група={group_str}, культура={culture_str}, форма оплати={payment_str}, валюта={currency_str}")
+    logging.debug(f"Параметри заявки: регіон={region}, район={district}, місто={city}, "
+                  f"група={group_str}, культура={culture_str}, форма оплати={payment_str}, валюта={currency_str}")
 
+    # Перевірка наявності всіх необхідних даних
+    if not (region and district and city and group_str and culture_str and payment_str and currency_str):
+        logging.error("Не вистачає обов'язкових даних для розрахунку ціни.")
+        return None
+
+    blocks = price_config["blocks"]
+
+    # Спочатку перевіряємо, чи є у прайс‑листі співпадаючий запис, тобто базова ціна
+    base_price = find_price_in_block(currency_str, group_str, culture_str, payment_str, blocks)
+    if base_price is None:
+        logging.error("Відсутня базова ціна в прайс-листі для даної заявки – розрахунок не можливий.")
+        return None
+
+    # Лише якщо базова ціна знайдена, проводимо запит до Routes API для отримання відстані
     dist_km = get_distance_km(region, district, city)
     if dist_km is None:
         logging.error("Не вдалося отримати відстань для заявки.")
@@ -651,27 +637,19 @@ def calculate_and_set_bot_price(app, row, price_config):
     logging.info(f"Відстань для заявки: {dist_km} км")
 
     distance_data = price_config["distance_ranges"]
-    blocks = price_config["blocks"]
 
     tariff_value = find_tariff_for_distance(dist_km, distance_data, currency_str)
     if tariff_value is None:
         logging.error("Не знайдено тариф для заданої відстані.")
         return None
 
-    base_price = find_price_in_block(currency_str, group_str, culture_str, payment_str, blocks)
-    if base_price is None:
-        logging.error("Не знайдено базову ціну для заявки.")
-        return None
-
     final_price = base_price - tariff_value
     if final_price < 0:
         final_price = 0
 
-    # Якщо ціна ціла, перетворюємо її на int для видалення ".0"
     if final_price == int(final_price):
         final_price = int(final_price)
 
     logging.info(f"Розрахована ціна: {final_price} (базова ціна {base_price} - тариф {tariff_value})")
     set_bot_price_in_table2(row, final_price)
     return final_price
-
