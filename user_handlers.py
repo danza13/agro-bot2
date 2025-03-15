@@ -949,7 +949,8 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
         # Записуємо дату/час змін у колонку N (14) таблиці2
         now_str = datetime.now().strftime("%d.%m.%Y\n%H:%M:%S")
         ws2 = get_worksheet2()
-        ws2.update_cell(sheet_row, 14, now_str)
+        cell_address = rowcol_to_a1(sheet_row, 14)
+        ws2.update_acell(cell_address, now_str)
 
         # Запускаємо перерахунок автопрайсу
         await re_run_autocalc_for_app(uid, index)
