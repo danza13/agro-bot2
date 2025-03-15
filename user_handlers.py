@@ -752,13 +752,14 @@ async def edit_application_direct(message: types.Message, state: FSMContext):
     app = user_apps[index]
 
     # Формуємо словник з полями, які хочемо передати до webapp2
-    quantity_clean = re.sub(r"[^\d.]", "", app.get("quantity", ""))
+    quantity_clean = re.sub(r"[^\d.]", "", str(app.get("quantity", "")))
     webapp2_data = {
         "quantity": quantity_clean,
         "price": app.get("price", ""),
         "currency": app.get("currency", ""),
         "payment_form": app.get("payment_form", "")
     }
+
 
     webapp_url2 = "https://danza13.github.io/agro-webapp/webapp2.html"
     prefill = quote(json.dumps(webapp2_data))
@@ -914,7 +915,7 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
         "payment_form": app.get("payment_form", "")
     }
 
-    new_quantity = data_dict.get("quantity", "").strip()
+    new_quantity = str(data_dict.get("quantity", "")).strip()
     new_price = data_dict.get("price", "").strip()
     new_currency = data_dict.get("currency", "").strip()
     new_payment_form = data_dict.get("payment_form", "").strip()
