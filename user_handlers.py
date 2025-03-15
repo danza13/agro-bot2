@@ -753,7 +753,7 @@ async def edit_application_direct(message: types.Message, state: FSMContext):
 
     # Формуємо словник з полями, які хочемо передати до webapp2
     webapp2_data = {
-        "quantity": app.get("quantity", ""),
+        "quantity": app.get("quantity", "").replace(" Т", ""),
         "price": app.get("price", ""),
         "currency": app.get("currency", ""),
         "payment_form": app.get("payment_form", "")
