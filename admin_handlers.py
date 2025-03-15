@@ -18,7 +18,8 @@ from db import (
     update_application_status, delete_application_from_file_entirely
 )
 from gsheet_utils import (
-    export_database, get_worksheet1, get_worksheet2, reapply_confirmed_formatting
+    export_database, admin_remove_app_permanently,
+    get_worksheet1, get_worksheet2, reapply_confirmed_formatting, delete_price_cell_in_table2
 )
 
 
