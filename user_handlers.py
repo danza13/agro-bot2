@@ -365,8 +365,6 @@ async def view_application_detail(message: types.Message, state: FSMContext):
         details.append("Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться")
     elif status == "Agreed":
         details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
-    # (Якщо статус 'active', 'waiting', 'rejected' і т.ін. –
-    #  залишаємо, як є, або додаємо власні повідомлення)
 
     extra = app.get("extra_fields", {})
     if extra:
@@ -380,15 +378,12 @@ async def view_application_detail(message: types.Message, state: FSMContext):
     if status in ("active", "waiting", "Agreed"):
         kb.add("Переглянути пропозицію")
     elif status == "rejected":
-        # Якщо відхилена, додаткова логіка на ваш розсуд
         pass
     elif status == "deleted":
         details.append("\nЦя заявка вже позначена як 'deleted'.")
     elif status == "confirmed":
-        # Для підтвердженої заявки ніяких додаткових кнопок не додаємо
         pass
 
-    # Показуємо кнопки "Редагувати заявку" та "Видалити заявку" ТІЛЬКИ якщо статус != "confirmed"
     if status != "confirmed":
         kb.add("Редагувати заявку", "Видалити заявку")
 
@@ -398,9 +393,6 @@ async def view_application_detail(message: types.Message, state: FSMContext):
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
     await ApplicationStates.viewing_application.set()
 
-############################################
-# Повернення в список заявок із перегляду
-############################################
 
 @dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_application)
 async def user_view_application_detail_back(message: types.Message, state: FSMContext):
@@ -439,7 +431,7 @@ async def user_view_application_detail_back(message: types.Message, state: FSMCo
 
 
 ############################################
-# Кнопка "Переглянути пропозицію"
+# Переглянути пропозицію
 ############################################
 
 @dp.message_handler(Text(equals="Переглянути пропозицію"), state=ApplicationStates.viewing_application)
@@ -461,7 +453,7 @@ async def view_proposal(message: types.Message, state: FSMContext):
     app = user_apps[index]
     status = app.get("proposal_status", "")
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add("Назад")  # Кнопка "Назад" завжди
+    kb.add("Назад")
 
     proposal_text = f"Пропозиція по заявці: {app.get('proposal', 'Немає даних')}"
 
@@ -469,20 +461,16 @@ async def view_proposal(message: types.Message, state: FSMContext):
         await message.answer("Ви вже підтвердили пропозицію, очікуйте результатів.", reply_markup=kb)
         await ApplicationStates.viewing_proposal.set()
         return
-
     elif status == "waiting":
         await message.answer("Очікування: як тільки менеджер оновить пропозицію, Вам прийде сповіщення.", reply_markup=kb)
         await ApplicationStates.viewing_proposal.set()
         return
-
     elif status == "Agreed":
-        # **Замість трьох кнопок «Підтвердити», «Відхилити», «Видалити»**
-        # Тепер буде лише дві кнопки:
+        # Тільки 2 кнопки: Підтвердити/Відхилити
         kb.row("Підтвердити", "Відхилити")
         await message.answer(proposal_text, reply_markup=kb)
         await ApplicationStates.viewing_proposal.set()
         return
-
     else:
         await message.answer("Немає актуальної пропозиції.", reply_markup=kb)
         await ApplicationStates.viewing_proposal.set()
@@ -544,7 +532,6 @@ async def back_from_proposal_to_detail(message: types.Message, state: FSMContext
         details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    # Додаємо нові кнопки згідно ТЗ
     kb.row("Переглянути пропозицію", "Редагувати заявку", "Видалити заявку")
     kb.row("Назад")
 
@@ -564,10 +551,8 @@ async def proposal_rejected(message: types.Message, state: FSMContext):
         await message.answer("Немає даних про заявку.")
         return
 
-    # Позначаємо заявку як rejected
     update_application_status(message.from_user.id, index, "rejected")
 
-    # Відправляємо повідомлення та дві кнопки
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.row("Очікувати", "Видалити")
     await message.answer(
@@ -575,7 +560,6 @@ async def proposal_rejected(message: types.Message, state: FSMContext):
         reply_markup=kb
     )
 
-    # Переходимо в стан proposal_reply
     await ApplicationStates.proposal_reply.set()
 
 
@@ -588,21 +572,17 @@ async def wait_after_rejection(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
-    # Міняємо статус на waiting
     update_application_status(message.from_user.id, index, "waiting")
 
-    # Якщо треба зберегти флаг onceWaited, робимо так:
     apps = load_applications()
     uid = str(message.from_user.id)
     app = apps[uid][index]
     app["onceWaited"] = True
     save_applications(apps)
 
-    # За бажанням фарбуємо комірку в таблиці (якщо хотіли позначати waiting - наприклад, жовтим)
     sheet_row = app.get("sheet_row")
     if sheet_row:
-        # color_cell_yellow(sheet_row, col=... )  # тільки якщо хочете
-        pass
+        pass  # за бажанням можна додати фарбування
 
     await message.answer(
         "Заявка оновлена. Ви будете повідомлені при появі кращої пропозиції.",
@@ -629,11 +609,9 @@ async def delete_after_rejection(message: types.Message, state: FSMContext):
         return
 
     app = user_apps[index]
-    # Призначаємо статус deleted
     app["proposal_status"] = "deleted"
     save_applications(apps)
 
-    # Фарбуємо увесь рядок заявки червоним
     sheet_row = app.get("sheet_row")
     if sheet_row:
         try:
@@ -650,7 +628,6 @@ async def delete_after_rejection(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Підтвердити"), state=ApplicationStates.viewing_application)
 async def confirm_proposal(message: types.Message, state: FSMContext):
-    # Підтвердження пропозиції
     data = await state.get_data()
     index = data.get("selected_app_index")
 
@@ -666,10 +643,8 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
             confirmed_price = float(app.get("proposal", ""))
             bot_price = app.get("bot_price", None)
             if bot_price is not None and abs(confirmed_price - bot_price) < 1e-9:
-                # Очищуємо менеджерську ціну (стовпець 15)
                 delete_price_cell_in_table2(sheet_row, col=15)
             else:
-                # Очищуємо ціну бота (стовпець 13)
                 delete_price_cell_in_table2(sheet_row, col=13)
         except Exception:
             delete_price_cell_in_table2(sheet_row, col=13)
@@ -724,7 +699,7 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         f"Район: <b>{app.get('district', 'N/A')}</b>\n"
         f"Місто: <b>{app.get('city', 'Невідомо')}</b>\n"
         f"Група: <b>{app.get('group', 'Невідомо')}</b>\n"
-        f"Культура: <b>{app.get('culture', 'Невідомо')}</b>\n"
+        f"Культура: <b>{app.get('culture', 'Nевідомо')}</b>\n"
         f"{extra_part}"
         f"Кількість: <b>{app.get('quantity', 'Невідомо')} т</b>\n"
         f"Бажана ціна: <b>{app.get('price', 'Невідомо')}</b>\n"
@@ -831,9 +806,7 @@ async def cancel_editing_choice(message: types.Message, state: FSMContext):
 @dp.message_handler(Text(equals="Відкрити форму редагування"), state=ApplicationStates.editing_choice)
 async def open_form_for_editing(message: types.Message, state: FSMContext):
     """
-    Відкриваємо webapp2.html для редагування:
-      - Лише кількість, бажана ціна, валюта, форма оплати
-      - Попереднє заповнення
+    Відкриваємо webapp2.html для редагування (quantity, price, currency, payment_form)
     """
     data = await state.get_data()
     index = data.get("selected_app_index")
@@ -853,16 +826,18 @@ async def open_form_for_editing(message: types.Message, state: FSMContext):
 
     app = user_apps[index]
 
-    # Формуємо prefill для webapp2
-    # quantity, price, currency, paymentForm -> за аналогією
+    # Формуємо словник з полями, які хочемо передати до webapp2
     webapp2_data = {
         "quantity": app.get("quantity", ""),
         "price": app.get("price", ""),
-        "currency": app.get("currency", ""),         # "Грн"/"Долар"/"Євро"
-        "payment_form": app.get("payment_form", "")  # "Перерахунок з ПДВ"/...
+        "currency": app.get("currency", ""),
+        "payment_form": app.get("payment_form", "")
     }
 
+    # Скорочений WebApp
     webapp_url2 = "https://danza13.github.io/agro-webapp/webapp2.html"
+
+    # Передаємо JSON у ?data=...
     prefill = quote(json.dumps(webapp2_data))
     url_with_data = f"{webapp_url2}?data={prefill}"
 
@@ -878,8 +853,7 @@ async def open_form_for_editing(message: types.Message, state: FSMContext):
 @dp.message_handler(Text(equals="Скасувати"), state=ApplicationStates.waiting_for_webapp2_data)
 async def cancel_webapp2_editing(message: types.Message, state: FSMContext):
     """
-    Якщо користувач натискає Скасувати редагування,
-    повертаємося до детального перегляду заявки.
+    Якщо користувач натискає Скасувати — повертаємося до детального перегляду заявки.
     """
     await cancel_editing_choice(message, state)
 
@@ -887,7 +861,7 @@ async def cancel_webapp2_editing(message: types.Message, state: FSMContext):
 @dp.message_handler(lambda m: m.text and "/webapp2_data" in m.text, state=ApplicationStates.waiting_for_webapp2_data)
 async def webapp2_data_handler_text(message: types.Message, state: FSMContext):
     """
-    Обробка даних, якщо з якоїсь причини приходять у вигляді тексту /webapp2_data ...
+    Обробка, якщо WebApp data прийшла як текст /webapp2_data ...
     """
     user_id = message.from_user.id
     try:
@@ -903,7 +877,7 @@ async def webapp2_data_handler_text(message: types.Message, state: FSMContext):
 @dp.message_handler(content_types=types.ContentType.WEB_APP_DATA, state=ApplicationStates.waiting_for_webapp2_data)
 async def webapp2_data_handler_web_app(message: types.Message, state: FSMContext):
     """
-    Обробка даних, які приходять із webapp2.html (скорочена форма редагування).
+    Обробка даних, які приходять з webapp2.html
     """
     user_id = message.from_user.id
     try:
@@ -971,24 +945,22 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
     save_applications(apps)
 
     if changed_fields:
-        # Оновлюємо кольорове виділення в Worksheet1
+        # Оновлюємо поля в Worksheet1 із жовтим підсвічуванням
         update_worksheet1_cells_for_edit(sheet_row, changed_fields)
 
-        # === ДОДАЄМО: Запис у таблицю2, стовпець N (14), з датою/часом ===
+        # Записуємо дату/час змін у колонку N (14) таблиці2
         now_str = datetime.now().strftime("%d.%m.%Y\n%H:%M:%S")
         ws2 = get_worksheet2()
         ws2.update_cell(sheet_row, 14, now_str)
 
-        # Перезапускаємо автопрайс (якщо потрібно)
+        # Перезапуск автопрайсу
         await re_run_autocalc_for_app(uid, index)
 
         await bot.send_message(user_id, "Дані успішно змінені!", reply_markup=remove_keyboard())
     else:
         await bot.send_message(user_id, "Нічого не змінено.", reply_markup=remove_keyboard())
 
-    # Повертаємося до детального перегляду заявки
-    # (фактично дублюємо код відображення, як у view_application_detail).
-    # Але з повними оновленими даними.
+    # Повертаємося до детального перегляду заявки:
     app_updated = user_apps[index]
     timestamp = app_updated.get("timestamp", "")
     try:
@@ -1080,19 +1052,17 @@ async def confirm_deletion(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
-    # Позначаємо як deleted
     app = user_apps[index]
     app["proposal_status"] = "deleted"
     save_applications(apps)
 
-    # Зафарбувати червоним увесь рядок заявки в обох таблицях
     sheet_row = app.get("sheet_row")
     if sheet_row:
         try:
             ws1 = get_worksheet1()
             ws2 = get_worksheet2()
-            color_entire_row_red(ws1, sheet_row)  # #ff0000
-            color_entire_row_red(ws2, sheet_row)  # #ff0000
+            color_entire_row_red(ws1, sheet_row)
+            color_entire_row_red(ws2, sheet_row)
         except Exception as e:
             logging.exception(f"Помилка фарбування рядка {sheet_row} в червоний: {e}")
 
@@ -1102,10 +1072,7 @@ async def confirm_deletion(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Ні"), state=ApplicationStates.deletion_confirmation)
 async def cancel_deletion(message: types.Message, state: FSMContext):
-    """
-    Повертаємось до детального перегляду заявки
-    """
-    await cancel_editing_choice(message, state)  # викликаємо ту ж функцію, що повертає до перегляду
+    await cancel_editing_choice(message, state)
 
 
 ############################################
