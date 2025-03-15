@@ -760,10 +760,13 @@ async def edit_application_direct(message: types.Message, state: FSMContext):
         "payment_form": app.get("payment_form", "")
     }
 
+    # Додаткове логування даних для редагування
+    logging.debug(f"Дані для редагування заявки, що передаються у WebApp2: {webapp2_data}")
 
     webapp_url2 = "https://danza13.github.io/agro-webapp/webapp2.html"
     prefill = quote(json.dumps(webapp2_data))
     url_with_data = f"{webapp_url2}?data={prefill}"
+    logging.debug(f"URL для WebApp2: {url_with_data}")
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.add(
