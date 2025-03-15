@@ -250,9 +250,6 @@ async def admin_remove_app_permanently(user_id: int, app_index: int):
             save_applications(updated_apps)
             logging.debug("Оновлено номери рядків для заявок після видалення.")
 
-            # Повторно застосовуємо форматування для підтверджених заявок
-            reapply_confirmed_formatting()
-
         except Exception as e:
             logging.exception(f"Помилка видалення рядка в Google Sheets: {e}")
 
