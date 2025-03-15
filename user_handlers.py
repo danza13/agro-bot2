@@ -585,8 +585,7 @@ async def wait_after_rejection(message: types.Message, state: FSMContext):
 
     sheet_row = app.get("sheet_row")
     if sheet_row:
-        # Тут можна додати функцію фарбування, якщо потрібно
-        pass
+        pass  # за бажанням можна додати фарбування
 
     await message.answer(
         "Заявка оновлена. Ви будете повідомлені при появі кращої пропозиції.",
@@ -801,9 +800,7 @@ async def cancel_editing_choice(message: types.Message, state: FSMContext):
             details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    if status in ("active", "waiting", "Agreed"):
-        kb.add("Переглянути пропозицію")
-    kb.add("Редагувати заявку", "Видалити заявку")
+    kb.row("Переглянути пропозицію", "Редагувати заявку", "Видалити заявку")
     kb.row("Назад")
 
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
@@ -856,10 +853,6 @@ async def open_form_for_editing(message: types.Message, state: FSMContext):
     await ApplicationStates.waiting_for_webapp2_data.set()
     await state.update_data(editing_app_index=index)
 
-
-############################################
-# Обробка даних з webapp2.html (редагування)
-############################################
 
 @dp.message_handler(Text(equals="Скасувати"), state=ApplicationStates.waiting_for_webapp2_data)
 async def cancel_webapp2_editing(message: types.Message, state: FSMContext):
