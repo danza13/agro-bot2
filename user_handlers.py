@@ -1,3 +1,4 @@
+#user_handlers.py
 import json
 import re
 import logging
@@ -220,6 +221,119 @@ async def support_command(message: types.Message, state: FSMContext):
     keyboard.add(types.InlineKeyboardButton("Звернутись до підтримки", url="https://t.me/Dealeragro_bot"))
     await message.answer("Якщо вам потрібна допомога, натисніть кнопку нижче:", reply_markup=keyboard)
 
+@dp.message_handler(Text(equals="Актуальна"), state=ApplicationStates.viewing_topicality)
+async def topicality_actual(message: types.Message, state: FSMContext):
+    from gsheet_utils import get_worksheet2, rowcol_to_a1
+    uid = str(message.from_user.id)
+    apps = load_applications()
+    if uid in apps:
+        for app in apps[uid]:
+            if app.get("topicality_notification_sent"):
+                sheet_row = app.get("sheet_row")
+                if sheet_row:
+                    now_str = datetime.now(ZoneInfo("Europe/Kiev")).strftime("%d.%m.%Y\n%H:%M:%S")
+                    try:
+                        ws2 = get_worksheet2()
+                        cell_address = rowcol_to_a1(sheet_row, 15)  # Колонка O (15)
+                        ws2.update_acell(cell_address, now_str)
+                    except Exception as e:
+                        logging.exception(e)
+                # Скидаємо flag, щоб сповіщення не надсилалось повторно
+                app["topicality_notification_sent"] = False
+        save_applications(apps)
+    await state.finish()
+    await message.answer("Заявка підтверджена як актуальна.", reply_markup=get_main_menu_keyboard())
+
+@dp.message_handler(Text(equals="Потребує змін"), state=ApplicationStates.viewing_topicality)
+async def topicality_edit(message: types.Message, state: FSMContext):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.row("Форма редагування", "Назад")
+    # Записуємо в дані стану, що обрана дія редагування
+    await state.update_data(topicality_action="edit")
+    await message.answer("Відредагуйте заявку в формі:", reply_markup=kb)
+    await ApplicationStates.topicality_editing.set()
+
+@dp.message_handler(Text(equals="Назад"), state=ApplicationStates.topicality_editing)
+async def topicality_edit_back(message: types.Message, state: FSMContext):
+    # Повертаємо назад до основної клавіатури уточнення
+    await state.set_state(ApplicationStates.viewing_topicality)
+    await message.answer(
+        "Ваша заявка актуальна, чи потребує змін або видалення?",
+        reply_markup=get_topicality_keyboard()
+    )
+
+@dp.message_handler(Text(equals="Форма редагування"), state=ApplicationStates.topicality_editing)
+async def open_edit_form(message: types.Message, state: FSMContext):
+    uid = str(message.from_user.id)
+    apps = load_applications()
+    if uid in apps:
+        for i, app in enumerate(apps[uid]):
+            if app.get("topicality_notification_sent"):
+                # Записуємо індекс заявки для редагування в стані
+                await state.update_data(editing_app_index=i)
+                # Формуємо дані для попереднього заповнення
+                import re, json
+                from urllib.parse import quote
+                quantity_clean = re.sub(r"[^\d.]", "", str(app.get("quantity", "")))
+                webapp2_data = {
+                    "quantity": quantity_clean,
+                    "price": app.get("price", ""),
+                    "currency": app.get("currency", ""),
+                    "payment_form": app.get("payment_form", "")
+                }
+                webapp_url2 = "https://danza13.github.io/agro-webapp/webapp2.html"
+                prefill = quote(json.dumps(webapp2_data))
+                url_with_data = f"{webapp_url2}?data={prefill}"
+                kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+                kb.add(
+                    types.KeyboardButton("Редагувати заявку в WebApp", web_app=types.WebAppInfo(url=url_with_data))
+                )
+                kb.add("Назад")
+                await state.set_state(ApplicationStates.waiting_for_webapp2_data)
+                await message.answer("Натисніть, щоб відкрити форму для редагування:", reply_markup=kb)
+                return
+    await message.answer("Заявку не знайдено для редагування.", reply_markup=get_topicality_keyboard())
+
+@dp.message_handler(Text(equals="Видалити"), state=ApplicationStates.viewing_topicality)
+async def topicality_delete(message: types.Message, state: FSMContext):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.add("Так", "Ні")
+    await state.update_data(topicality_action="delete")
+    await message.answer("Ви хочете видалити заявку?", reply_markup=kb)
+    await ApplicationStates.topicality_deletion_confirmation.set()
+
+@dp.message_handler(Text(equals="Так"), state=ApplicationStates.topicality_deletion_confirmation)
+async def topicality_delete_confirm(message: types.Message, state: FSMContext):
+    uid = str(message.from_user.id)
+    apps = load_applications()
+    if uid in apps:
+        for app in apps[uid]:
+            if app.get("topicality_notification_sent"):
+                # Призначаємо статус заявки як deleted
+                app["proposal_status"] = "deleted"
+                sheet_row = app.get("sheet_row")
+                if sheet_row:
+                    try:
+                        from gsheet_utils import get_worksheet1, get_worksheet2, color_entire_row_red
+                        ws1 = get_worksheet1()
+                        ws2 = get_worksheet2()
+                        color_entire_row_red(ws1, sheet_row)
+                        color_entire_row_red(ws2, sheet_row)
+                    except Exception as e:
+                        logging.exception(e)
+                app["topicality_notification_sent"] = False
+    save_applications(apps)
+    await state.finish()
+    await message.answer("Ваша заявка видалена.", reply_markup=get_main_menu_keyboard())
+
+@dp.message_handler(Text(equals="Ні"), state=ApplicationStates.topicality_deletion_confirmation)
+async def topicality_delete_cancel(message: types.Message, state: FSMContext):
+    # Повертаємо користувача до основної клавіатури уточнення
+    await state.set_state(ApplicationStates.viewing_topicality)
+    await message.answer(
+        "Ваша заявка актуальна, чи потребує змін або видалення?",
+        reply_markup=get_topicality_keyboard()
+    )
 
 ############################################
 # "Подати заявку" та "Переглянути мої заявки"
