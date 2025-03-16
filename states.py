@@ -45,3 +45,5 @@ class AdminReview(StatesGroup):
     editing_applications_list = State()
     editing_single_application = State()
     select_new_status = State()
+    sending_mass_message = State()
+    sending_private_message = State()
