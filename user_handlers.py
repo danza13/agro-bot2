@@ -241,17 +241,26 @@ async def show_user_applications(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     uid = str(user_id)
     apps = load_applications()
-    user_apps = apps.get(uid, [])
-
-    # Фільтруємо заявки, що мають статус "deleted"
-    user_apps = [app for app in user_apps if app.get("proposal_status", "") != "deleted"]
-
-    if not user_apps:
+    all_apps = apps.get(uid, [])
+    
+    # Створюємо mapping: filtered_apps – список заявок, які не мають статусу "deleted",
+    # а mapping – список їхніх реальних індексів у all_apps.
+    filtered_apps = []
+    mapping = []
+    for idx, app in enumerate(all_apps):
+        if app.get("proposal_status", "") != "deleted":
+            mapping.append(idx)
+            filtered_apps.append(app)
+    
+    if not filtered_apps:
         await message.answer("Ви не маєте заявок.", reply_markup=get_main_menu_keyboard())
         return
 
+    # Зберігаємо mapping у стані
+    await state.update_data(apps_mapping=mapping)
+    
     buttons = []
-    for i, app in enumerate(user_apps, start=1):
+    for i, app in enumerate(filtered_apps, start=1):
         culture = app.get('culture', 'Невідомо')
         quantity = app.get('quantity', 'Невідомо')
         status = app.get("proposal_status", "")
@@ -260,7 +269,7 @@ async def show_user_applications(message: types.Message, state: FSMContext):
         else:
             btn_text = f"{i}. {culture} | {quantity} т"
         buttons.append(btn_text)
-
+    
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     row = []
     for text in buttons:
@@ -270,10 +279,9 @@ async def show_user_applications(message: types.Message, state: FSMContext):
             row = []
     if row:
         kb.row(*row)
-
+    
     kb.row("Назад")
     msg = await message.answer("Ваші заявки:", reply_markup=kb)
-
     await state.update_data(viewing_msg_id=msg.message_id)
     await ApplicationStates.viewing_applications.set()
 
@@ -291,18 +299,17 @@ async def back_from_viewing_applications(message: types.Message, state: FSMConte
 @dp.message_handler(Regexp(r"^(\d+)\.\s(.+)\s\|\s(.+)\sт(?:\s✅)?$"), state="*")
 async def view_application_detail(message: types.Message, state: FSMContext):
     text_str = message.text.strip()
-    # Якщо користувач натискає "Назад" у цьому ж хендлері
+    # Якщо користувач натискає "Назад", відновлюємо список заявок (залишаємо поточну логіку)
     if text_str == "Назад":
         user_id = message.from_user.id
         uid = str(user_id)
         apps = load_applications()
-        user_apps = apps.get(uid, [])
-
-        if not user_apps:
+        all_apps = apps.get(uid, [])
+        if not all_apps:
             await message.answer("Ви не маєте заявок.", reply_markup=get_main_menu_keyboard())
         else:
             buttons = []
-            for i, app in enumerate(user_apps, start=1):
+            for i, app in enumerate(all_apps, start=1):
                 culture = app.get('culture', 'Невідомо')
                 quantity = app.get('quantity', 'Невідомо')
                 status = app.get("proposal_status", "")
@@ -311,7 +318,7 @@ async def view_application_detail(message: types.Message, state: FSMContext):
                 else:
                     btn_text = f"{i}. {culture} | {quantity} т"
                 buttons.append(btn_text)
-
+    
             kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             row = []
             for t in buttons:
@@ -323,32 +330,38 @@ async def view_application_detail(message: types.Message, state: FSMContext):
                 kb.row(*row)
             kb.row("Назад")
             await message.answer("Ваші заявки:", reply_markup=kb)
-
+    
         await ApplicationStates.viewing_applications.set()
         return
 
-    # Якщо це не "Назад", інтерпретуємо як вибір заявки
     user_id = message.from_user.id
     uid = str(user_id)
     apps = load_applications()
-    user_apps = apps.get(uid, [])
-
+    all_apps = apps.get(uid, [])
+    
+    # Отримуємо mapping із стану
+    state_data = await state.get_data()
+    mapping = state_data.get("apps_mapping", [])
+    
     match = re.match(r"^(\d+)\.\s(.+)\s\|\s(.+)\sт(?:\s✅)?$", text_str)
     if not match:
         await message.answer("Невірна заявка.", reply_markup=remove_keyboard())
         return
 
-    idx = int(match.group(1)) - 1
-    if idx < 0 or idx >= len(user_apps):
+    displayed_idx = int(match.group(1)) - 1
+    if displayed_idx < 0 or displayed_idx >= len(mapping):
         await message.answer("Невірна заявка.", reply_markup=remove_keyboard())
         return
 
-    app = user_apps[idx]
+    # Отримуємо реальний індекс із збереженого mapping
+    real_idx = mapping[displayed_idx]
+    app = all_apps[real_idx]
+
     timestamp = app.get("timestamp", "")
     try:
         dt = datetime.fromisoformat(timestamp)
         formatted_date = dt.strftime("%d.%m.%Y")
-    except:
+    except Exception:
         formatted_date = timestamp
 
     status = app.get("proposal_status", "")
@@ -373,32 +386,22 @@ async def view_application_detail(message: types.Message, state: FSMContext):
         details.append("Додаткові параметри:")
         for key, value in extra.items():
             details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
-            
+
     if status == "confirmed":
         details.append(f"Пропозиція ціни: {app.get('proposal', '—')}")
         details.append("Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться")
     elif status == "Agreed":
         details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
 
-
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-
-    # Показуємо «Переглянути пропозицію» лише якщо статус дозволяє (active, waiting, Agreed)
     if status in ("active", "waiting", "Agreed"):
         kb.add("Переглянути пропозицію")
-    elif status == "rejected":
-        pass
-    elif status == "deleted":
-        details.append("\nЦя заявка вже позначена як 'deleted'.")
-    elif status == "confirmed":
-        pass
-
     if status != "confirmed":
         kb.add("Редагувати заявку", "Видалити заявку")
-
     kb.row("Назад")
 
-    await state.update_data(selected_app_index=idx)
+    # Зберігаємо реальний індекс обраної заявки у стані
+    await state.update_data(selected_app_index=real_idx)
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
     await ApplicationStates.viewing_application.set()
 
@@ -408,13 +411,21 @@ async def user_view_application_detail_back(message: types.Message, state: FSMCo
     user_id = message.from_user.id
     uid = str(user_id)
     apps = load_applications()
-    user_apps = apps.get(uid, [])
+    all_apps = apps.get(uid, [])
 
-    if not user_apps:
+    # Фільтруємо заявки, що НЕ мають статус "deleted", і створюємо mapping
+    filtered_apps = []
+    mapping = []
+    for idx, app in enumerate(all_apps):
+        if app.get("proposal_status", "") != "deleted":
+            filtered_apps.append(app)
+            mapping.append(idx)
+
+    if not filtered_apps:
         await message.answer("Ви не маєте заявок.", reply_markup=get_main_menu_keyboard())
     else:
         buttons = []
-        for i, app in enumerate(user_apps, start=1):
+        for i, app in enumerate(filtered_apps, start=1):
             culture = app.get('culture', 'Невідомо')
             quantity = app.get('quantity', 'Невідомо')
             status = app.get("proposal_status", "")
@@ -436,6 +447,8 @@ async def user_view_application_detail_back(message: types.Message, state: FSMCo
         kb.row("Назад")
         await message.answer("Ваші заявки:", reply_markup=kb)
 
+    # Зберігаємо mapping у стані для подальшого використання
+    await state.update_data(apps_mapping=mapping)
     await ApplicationStates.viewing_applications.set()
 
 
