@@ -27,3 +27,8 @@ def get_admin_requests_menu():
     kb.add("Видалення заявок", "Редагування заявок")
     kb.add("Назад")
     return kb
+    
+def get_topicality_keyboard():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.add("Актуальна", "Потребує змін", "Видалити")
+    return kb
