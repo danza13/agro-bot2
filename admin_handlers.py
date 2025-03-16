@@ -120,7 +120,7 @@ async def admin_menu_choosing_section(message: types.Message, state: FSMContext)
         await state.finish()
         await message.answer("Вихід з адмін-меню. Повертаємось у звичайне меню:", reply_markup=get_main_menu_keyboard())
     else:
-        await message.answer("Будь ласка, оберіть із меню: «Модерація», «Заявки» або «Вийти з адмін-меню».")
+        await message.answer("Будь ласка, оберіть із меню: «Модерація», «Заявки» або «Вийти з адмін-меню».") 
 
 
 ############################################
@@ -299,6 +299,14 @@ async def admin_view_approved_list(message: types.Message, state: FSMContext):
     data = await state.get_data()
     from_moderation_menu = data.get("from_moderation_menu", False)
     approved_dict = data.get("approved_dict", {})
+    # Обробка кнопки "Розсилка"
+    if text == "Розсилка":
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        kb.add("Скасувати")
+        await message.answer("Відправте текст для розсилки", reply_markup=kb)
+        await AdminReview.sending_mass_message.set()
+        return
+
     if text == "Назад":
         if from_moderation_menu:
             await message.answer("Повертаємось до розділу 'Модерація':", reply_markup=get_admin_moderation_menu())
@@ -324,13 +332,13 @@ async def admin_view_approved_list(message: types.Message, state: FSMContext):
         f"Номер телефону: {phone}\n"
         f"Телеграм ID: {user_id}"
     )
-    # У детальному перегляді користувача має бути кнопка "Відправити повідомлення"
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.row("Редагувати", "Видалити", "Відправити повідомлення")
     kb.add("Назад")
     await state.update_data(selected_approved_user_id=str(user_id), selected_fullname=fullname)
     await AdminReview.viewing_approved_user.set()
     await message.answer(details, reply_markup=kb)
+
 
 @dp.message_handler(Text(equals="Розсилка"), state=AdminReview.viewing_approved_list)
 async def handle_mass_mailing_prompt(message: types.Message, state: FSMContext):
@@ -339,10 +347,10 @@ async def handle_mass_mailing_prompt(message: types.Message, state: FSMContext):
     await message.answer("Відправте текст для розсилки", reply_markup=kb)
     await AdminReview.sending_mass_message.set()
     
+
 @dp.message_handler(state=AdminReview.sending_mass_message)
 async def process_mass_mailing(message: types.Message, state: FSMContext):
     if message.text == "Скасувати":
-        # Формуємо клавіатуру для бази користувачів:
         data = await state.get_data()
         approved_dict = data.get("approved_dict", {})
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -354,15 +362,12 @@ async def process_mass_mailing(message: types.Message, state: FSMContext):
                 row = []
         if row:
             kb.row(*row)
-        # Передостанній рядок: кнопки "Вивантажити базу" і "Розсилка"
         kb.row("Вивантажити базу", "Розсилка")
-        # Останній рядок: лише "Назад"
         kb.add("Назад")
         await AdminReview.viewing_approved_list.set()
         await message.answer("База користувачів:", reply_markup=kb)
         return
 
-    # Якщо введено текст для розсилки, відправляємо повідомлення всім схваленим користувачам
     users_data = load_users()
     approved_users = users_data.get("approved_users", {})
     failed = []
@@ -373,7 +378,6 @@ async def process_mass_mailing(message: types.Message, state: FSMContext):
             logging.exception(f"Не вдалося надіслати повідомлення користувачу {uid}: {e}")
             failed.append(uid)
     response = "Розсилка виконана." if not failed else f"Повідомлення не надіслано наступним користувачам: {', '.join(failed)}"
-    # Повертаємося до бази користувачів з тією ж клавіатурою
     data = await state.get_data()
     approved_dict = data.get("approved_dict", {})
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -390,6 +394,7 @@ async def process_mass_mailing(message: types.Message, state: FSMContext):
     await AdminReview.viewing_approved_list.set()
     await message.answer(response, reply_markup=kb)
 
+
 @dp.message_handler(Text(equals="Відправити повідомлення"), state=AdminReview.viewing_approved_user)
 async def handle_send_private_message_prompt(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -399,10 +404,10 @@ async def handle_send_private_message_prompt(message: types.Message, state: FSMC
     await message.answer(f"Введіть текст для відправки повідомлення користувачу {fullname}", reply_markup=kb)
     await AdminReview.sending_private_message.set()
 
+
 @dp.message_handler(state=AdminReview.sending_private_message)
 async def process_send_private_message(message: types.Message, state: FSMContext):
     if message.text == "Скасувати":
-        # Повертаємося до детального перегляду користувача з кнопками "Редагувати", "Видалити", "Відправити повідомлення", "Назад"
         data = await state.get_data()
         user_id_str = data.get("selected_approved_user_id")
         users_data = load_users()
@@ -421,16 +426,13 @@ async def process_send_private_message(message: types.Message, state: FSMContext
         await message.answer(details, reply_markup=kb)
         return
 
-    # Якщо введено текст, відправляємо його користувачу
-    data = await state.get_data()
-    user_id_str = data.get("selected_approved_user_id")
+    user_id_str = (await state.get_data()).get("selected_approved_user_id")
     try:
         await bot.send_message(int(user_id_str), message.text, reply_markup=remove_keyboard())
         response = "Повідомлення відправлено."
     except Exception as e:
         logging.exception(f"Не вдалося надіслати повідомлення користувачу {user_id_str}: {e}")
         response = "Помилка відправлення повідомлення."
-    # Повертаємося до детального перегляду користувача з початковими кнопками
     users_data = load_users()
     info = users_data.get("approved_users", {}).get(user_id_str, {})
     fullname = info.get("fullname", "—")
@@ -445,6 +447,7 @@ async def process_send_private_message(message: types.Message, state: FSMContext
     kb.add("Назад")
     await AdminReview.viewing_approved_user.set()
     await message.answer(response + "\n" + details, reply_markup=kb)
+
 
 @dp.message_handler(state=AdminReview.viewing_approved_user)
 async def admin_view_approved_single_user(message: types.Message, state: FSMContext):
@@ -661,17 +664,15 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
                 await message.answer("У таблиці немає заявок.", reply_markup=get_admin_requests_menu())
                 return
             kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-            temp_row = []  # список для накопичення кнопок
+            temp_row = []
             for i, row in enumerate(rows[1:], start=2):
                 if row and row[0].strip():
                     request_number = row[0].strip()
                     btn_text = f"{request_number} (рядок {i})"
                     temp_row.append(btn_text)
-                    # Коли накопичено 3 кнопки, додати їх як один рядок
                     if len(temp_row) == 3:
                         kb.row(*temp_row)
                         temp_row = []
-            # Додати залишок кнопок, якщо є
             if temp_row:
                 kb.row(*temp_row)
             kb.add("Назад")
@@ -763,7 +764,6 @@ async def confirm_deletion_yes(message: types.Message, state: FSMContext):
         return
     success = await admin_remove_app_permanently(int(uid), app_index)
     if success:
-        # Після видалення перезавантажуємо список "видалених" заявок
         apps = load_applications()
         deleted_apps = []
         for user_id, user_apps in apps.items():
@@ -774,7 +774,6 @@ async def confirm_deletion_yes(message: types.Message, state: FSMContext):
                         "app_index": idx,
                         "app_data": app_data
                     })
-        # Формуємо клавіатуру для списку видалених заявок з 3 кнопками в рядку
         if deleted_apps:
             kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             temp_row = []
@@ -801,7 +800,6 @@ async def confirm_deletion_yes(message: types.Message, state: FSMContext):
                 f"Заявку з рядка {row_number} успішно видалено.\nБільше немає заявок, позначених як 'видалені'.",
                 reply_markup=kb
             )
-        # Встановлюємо стан для перегляду списку видалених заявок
         await AdminReview.viewing_deleted_list.set()
     else:
         await message.answer("Помилка видалення заявки.", reply_markup=get_admin_requests_menu())
@@ -1021,7 +1019,7 @@ async def admin_view_deleted_app_handler(message: types.Message, state: FSMConte
             await message.answer("Помилка: Заявка не знайдена або вже була видалена.", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
     else:
-        await message.answer("Оберіть «Видалити назавжди» або «Назад».")
+        await message.answer("Оберіть «Видалити назавжди» або «Назад».") 
 
 
 ############################################
