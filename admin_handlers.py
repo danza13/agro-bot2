@@ -322,13 +322,127 @@ async def admin_view_approved_list(message: types.Message, state: FSMContext):
         f"Номер телефону: {phone}\n"
         f"Телеграм ID: {user_id}"
     )
+    # У детальному перегляді користувача має бути кнопка "Відправити повідомлення"
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.row("Редагувати", "Видалити")
+    kb.row("Редагувати", "Видалити", "Відправити повідомлення")
     kb.add("Назад")
-    await state.update_data(selected_approved_user_id=str(user_id))
+    await state.update_data(selected_approved_user_id=str(user_id), selected_fullname=fullname)
     await AdminReview.viewing_approved_user.set()
     await message.answer(details, reply_markup=kb)
 
+@dp.message_handler(Text(equals="Розсилка"), state=AdminReview.viewing_approved_list)
+async def handle_mass_mailing_prompt(message: types.Message, state: FSMContext):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.add("Скасувати")
+    await message.answer("Відправте текст для розсилки", reply_markup=kb)
+    await AdminReview.sending_mass_message.set()
+    
+@dp.message_handler(state=AdminReview.sending_mass_message)
+async def process_mass_mailing(message: types.Message, state: FSMContext):
+    if message.text == "Скасувати":
+        # Формуємо клавіатуру для бази користувачів:
+        data = await state.get_data()
+        approved_dict = data.get("approved_dict", {})
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        row = []
+        for name in approved_dict.keys():
+            row.append(name)
+            if len(row) == 2:
+                kb.row(*row)
+                row = []
+        if row:
+            kb.row(*row)
+        # Передостанній рядок: кнопки "Вивантажити базу" і "Розсилка"
+        kb.row("Вивантажити базу", "Розсилка")
+        # Останній рядок: лише "Назад"
+        kb.add("Назад")
+        await AdminReview.viewing_approved_list.set()
+        await message.answer("База користувачів:", reply_markup=kb)
+        return
+
+    # Якщо введено текст для розсилки, відправляємо повідомлення всім схваленим користувачам
+    users_data = load_users()
+    approved_users = users_data.get("approved_users", {})
+    failed = []
+    for uid in approved_users.keys():
+        try:
+            await bot.send_message(int(uid), message.text, reply_markup=remove_keyboard())
+        except Exception as e:
+            logging.exception(f"Не вдалося надіслати повідомлення користувачу {uid}: {e}")
+            failed.append(uid)
+    response = "Розсилка виконана." if not failed else f"Повідомлення не надіслано наступним користувачам: {', '.join(failed)}"
+    # Повертаємося до бази користувачів з тією ж клавіатурою
+    data = await state.get_data()
+    approved_dict = data.get("approved_dict", {})
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    row = []
+    for name in approved_dict.keys():
+        row.append(name)
+        if len(row) == 2:
+            kb.row(*row)
+            row = []
+    if row:
+        kb.row(*row)
+    kb.row("Вивантажити базу", "Розсилка")
+    kb.add("Назад")
+    await AdminReview.viewing_approved_list.set()
+    await message.answer(response, reply_markup=kb)
+
+@dp.message_handler(Text(equals="Відправити повідомлення"), state=AdminReview.viewing_approved_user)
+async def handle_send_private_message_prompt(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    fullname = data.get("selected_fullname", "користувачу")
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.add("Скасувати")
+    await message.answer(f"Введіть текст для відправки повідомлення користувачу {fullname}", reply_markup=kb)
+    await AdminReview.sending_private_message.set()
+
+@dp.message_handler(state=AdminReview.sending_private_message)
+async def process_send_private_message(message: types.Message, state: FSMContext):
+    if message.text == "Скасувати":
+        # Повертаємося до детального перегляду користувача з кнопками "Редагувати", "Видалити", "Відправити повідомлення", "Назад"
+        data = await state.get_data()
+        user_id_str = data.get("selected_approved_user_id")
+        users_data = load_users()
+        info = users_data.get("approved_users", {}).get(user_id_str, {})
+        fullname = info.get("fullname", "—")
+        phone = info.get("phone", "—")
+        details = (
+            f"ПІБ: {fullname}\n"
+            f"Номер телефону: {phone}\n"
+            f"Телеграм ID: {user_id_str}"
+        )
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        kb.row("Редагувати", "Видалити", "Відправити повідомлення")
+        kb.add("Назад")
+        await AdminReview.viewing_approved_user.set()
+        await message.answer(details, reply_markup=kb)
+        return
+
+    # Якщо введено текст, відправляємо його користувачу
+    data = await state.get_data()
+    user_id_str = data.get("selected_approved_user_id")
+    try:
+        await bot.send_message(int(user_id_str), message.text, reply_markup=remove_keyboard())
+        response = "Повідомлення відправлено."
+    except Exception as e:
+        logging.exception(f"Не вдалося надіслати повідомлення користувачу {user_id_str}: {e}")
+        response = "Помилка відправлення повідомлення."
+    # Повертаємося до детального перегляду користувача з початковими кнопками
+    users_data = load_users()
+    info = users_data.get("approved_users", {}).get(user_id_str, {})
+    fullname = info.get("fullname", "—")
+    phone = info.get("phone", "—")
+    details = (
+        f"ПІБ: {fullname}\n"
+        f"Номер телефону: {phone}\n"
+        f"Телеграм ID: {user_id_str}"
+    )
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.row("Редагувати", "Видалити", "Відправити повідомлення")
+    kb.add("Назад")
+    await AdminReview.viewing_approved_user.set()
+    await message.answer(response + "\n" + details, reply_markup=kb)
 
 @dp.message_handler(state=AdminReview.viewing_approved_user)
 async def admin_view_approved_single_user(message: types.Message, state: FSMContext):
