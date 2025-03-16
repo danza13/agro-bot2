@@ -4,12 +4,16 @@ import logging
 from aiohttp import web
 from aiogram import executor
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from keyboards import get_topicality_keyboard
+
 from loader import bot, dp
 from config import CHECK_INTERVAL, API_PORT
 from db import load_applications, save_applications
 from gsheet_utils import (
     get_worksheet1, color_cell_red, color_cell_green, color_cell_yellow,
-    parse_price_sheet, calculate_and_set_bot_price
+    parse_price_sheet, calculate_and_set_bot_price, get_worksheet2, rowcol_to_a1, color_entire_row_red
 )
 
 # Імпортуємо хендлери (вони тепер імпортують bot/dispatcher з loader.py)
@@ -26,6 +30,51 @@ def resume_polling():
     global POLLING_PAUSED
     POLLING_PAUSED = False
 
+async def poll_topicality_notifications():
+    """
+    Фонове завдання:
+    - Щосекунди/хвилини перевіряє всі заявки у файлі.
+    - Якщо заявка (зі статусом active/ waiting) була створена більше 24 годин тому
+      і для неї ще не відправлено сповіщення (flag 'topicality_notification_sent' не встановлено),
+      то надсилається повідомлення користувачу з клавіатурою для уточнення актуальності.
+    - Після відправлення в запис заявки додається flag, щоб не надсилати повторно.
+    """
+    while True:
+        apps = load_applications()
+        now = datetime.now()
+        for uid, app_list in apps.items():
+            for i, app in enumerate(app_list):
+                status = app.get("proposal_status", "active")
+                # Опрацьовуємо лише активні/ waiting заявки
+                if status not in ("active", "waiting"):
+                    continue
+                # Якщо уже відправлено сповіщення – пропускаємо
+                if app.get("topicality_notification_sent"):
+                    continue
+                try:
+                    submission_time = datetime.fromisoformat(app["timestamp"])
+                except Exception:
+                    continue
+                if now - submission_time >= timedelta(hours=24):
+                    # Формуємо повідомлення. Використовуємо індексацію (i+1) для номера заявки.
+                    msg_text = (
+                        f"Ваша заявка {i+1}. {app.get('culture', 'Невідомо')} | {app.get('quantity', 'Невідомо')} т "
+                        "актуальна, чи потребує змін або видалення?"
+                    )
+                    try:
+                        await bot.send_message(
+                            app.get("chat_id"),
+                            msg_text,
+                            reply_markup=get_topicality_keyboard()
+                        )
+                        # Позначаємо, що сповіщення для цієї заявки вже відправлено
+                        app["topicality_notification_sent"] = True
+                    except Exception as e:
+                        logging.exception(f"Помилка надсилання topicality сповіщення для uid={uid}: {e}")
+        save_applications(apps)
+        await asyncio.sleep(60)  # Перевіряти кожну хвилину
+        
+        
 ########################################################
 # Фонова перевірка manager_price + bot_price
 ########################################################
@@ -173,6 +222,7 @@ async def start_webserver():
 async def on_startup(dp):
     logging.info("Бот запущено. Старт фонових задач...")
     asyncio.create_task(poll_manager_proposals())
+    asyncio.create_task(poll_topicality_notifications())
     asyncio.create_task(start_webserver())
 
 ########################################################
