@@ -83,10 +83,16 @@ async def poll_manager_proposals():
                                 if status == "waiting":
                                     culture = app.get("culture", "Невідомо")
                                     quantity = app.get("quantity", "Невідомо")
-                                    msg = (f"Ціна по заявці {idx+1}. {culture} | {quantity} т змінилась з "
-                                           f"{previous_proposal} на {current_manager_price_str}")
+                                    msg = (
+                                        f"Ціна по заявці {idx+1}. {culture} | {quantity} т змінилась з "
+                                        f"{previous_proposal} на {current_manager_price_str}\n\n"
+                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                                    )
                                 else:
-                                    msg = f"Для Вашої заявки оновлено пропозицію: {current_manager_price_str}"
+                                    msg = (
+                                        f"Для Вашої заявки оновлено пропозицію: {current_manager_price_str}\n\n"
+                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                                    )
                                 try:
                                     await bot.send_message(app.get("chat_id"), msg)
                                 except BotBlocked:
@@ -118,7 +124,10 @@ async def poll_manager_proposals():
                         app["proposal_status"] = "Agreed"
                         culture = app.get("culture", "Невідомо")
                         quantity = app.get("quantity", "Невідомо")
-                        msg = f"З'явилася пропозиція для Вашої заявки {idx+1}. {culture} | {quantity} т: {bot_price_value}"
+                        msg = (
+                            f"З'явилася пропозиція для Вашої заявки {idx+1}. {culture} | {quantity} т: {bot_price_value}\n\n"
+                            "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                        )
                         try:
                             await bot.send_message(app.get("chat_id"), msg)
                         except BotBlocked:
