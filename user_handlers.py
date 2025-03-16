@@ -1084,7 +1084,7 @@ async def confirm_deletion(message: types.Message, state: FSMContext):
         except Exception as e:
             logging.exception(f"Помилка фарбування рядка {sheet_row} в червоний: {e}")
 
-    await message.answer("Заявка видалена (deleted).", reply_markup=get_main_menu_keyboard())
+    await message.answer("Заявка видалена.", reply_markup=get_main_menu_keyboard())
     await state.finish()
 
 
