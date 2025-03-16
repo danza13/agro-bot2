@@ -161,9 +161,11 @@ async def admin_moderation_section_handler(message: types.Message, state: FSMCon
                 row = []
         if row:
             kb.row(*row)
-        kb.add("Вивантажити базу", "Назад")
+        kb.row("Вивантажити базу", "Розсилка")
+        kb.add("Назад")
+
         await state.update_data(approved_dict=approved_dict, from_moderation_menu=True)
-        await message.answer("Список схвалених користувачів (по два в рядку):", reply_markup=kb)
+        await message.answer("Список схвалених користувачів:", reply_markup=kb)
         await AdminReview.viewing_approved_list.set()
     elif text == "Назад":
         await message.answer("Головне меню адміна:", reply_markup=get_admin_root_menu())
