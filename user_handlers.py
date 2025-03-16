@@ -5,6 +5,8 @@ import asyncio
 from datetime import datetime
 from urllib.parse import quote
 
+from zoneinfo import ZoneInfo
+
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text, Regexp
@@ -241,6 +243,9 @@ async def show_user_applications(message: types.Message, state: FSMContext):
     apps = load_applications()
     user_apps = apps.get(uid, [])
 
+    # Фільтруємо заявки, що мають статус "deleted"
+    user_apps = [app for app in user_apps if app.get("proposal_status", "") != "deleted"]
+
     if not user_apps:
         await message.answer("Ви не маєте заявок.", reply_markup=get_main_menu_keyboard())
         return
@@ -363,17 +368,18 @@ async def view_application_detail(message: types.Message, state: FSMContext):
         f"Бажана ціна: {app.get('price', '')}"
     ]
 
+    extra = app.get("extra_fields", {})
+    if extra:
+        details.append("Додаткові параметри:")
+        for key, value in extra.items():
+            details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
+            
     if status == "confirmed":
         details.append(f"Пропозиція ціни: {app.get('proposal', '—')}")
         details.append("Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться")
     elif status == "Agreed":
         details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
 
-    extra = app.get("extra_fields", {})
-    if extra:
-        details.append("Додаткові параметри:")
-        for key, value in extra.items():
-            details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 
@@ -455,28 +461,25 @@ async def view_proposal(message: types.Message, state: FSMContext):
 
     app = user_apps[index]
     status = app.get("proposal_status", "")
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add("Назад")
-
     proposal_text = f"Пропозиція по заявці: {app.get('proposal', 'Немає даних')}"
 
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+
     if status == "confirmed":
+        kb.add("Назад")
         await message.answer("Ви вже підтвердили пропозицію, очікуйте результатів.", reply_markup=kb)
-        await ApplicationStates.viewing_proposal.set()
-        return
     elif status == "waiting":
+        kb.add("Назад")
         await message.answer("Очікування: як тільки менеджер оновить пропозицію, Вам прийде сповіщення.", reply_markup=kb)
-        await ApplicationStates.viewing_proposal.set()
-        return
     elif status == "Agreed":
-        # Тільки 2 кнопки: Підтвердити/Відхилити
         kb.row("Підтвердити", "Відхилити")
+        kb.add("Назад")
         await message.answer(proposal_text, reply_markup=kb)
-        await ApplicationStates.viewing_proposal.set()
-        return
     else:
+        kb.add("Назад")
         await message.answer("Немає актуальної пропозиції.", reply_markup=kb)
-        await ApplicationStates.viewing_proposal.set()
+
+    await ApplicationStates.viewing_proposal.set()
 
 
 @dp.message_handler(Text(equals="Назад"), state=ApplicationStates.viewing_proposal)
@@ -535,7 +538,8 @@ async def back_from_proposal_to_detail(message: types.Message, state: FSMContext
         details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.row("Переглянути пропозицію", "Редагувати заявку", "Видалити заявку")
+    kb.row("Переглянути пропозицію")
+    kb.row("Редагувати заявку", "Видалити заявку")
     kb.row("Назад")
 
     await message.answer("\n".join(details), reply_markup=kb, parse_mode="HTML")
@@ -622,7 +626,7 @@ async def delete_after_rejection(message: types.Message, state: FSMContext):
         except Exception as e:
             logging.exception(f"Помилка фарбування рядка {sheet_row} в червоний: {e}")
 
-    await message.answer("Ваша заявка видалена (позначена як 'deleted').", reply_markup=get_main_menu_keyboard())
+    await message.answer("Ваша заявка видалена.", reply_markup=get_main_menu_keyboard())
     await state.finish()
 
 
@@ -777,7 +781,7 @@ async def edit_application_direct(message: types.Message, state: FSMContext):
     )
     kb.add("Скасувати")
 
-    await message.answer("Натисніть, щоб відкрити скорочену форму WebApp для редагування:", reply_markup=kb)
+    await message.answer("Натисніть, щоб відкрити форму для редагування:", reply_markup=kb)
 
     # Тримаємо індекс поточної заявки, чекаємо на дані з WebApp2
     await state.update_data(editing_app_index=index)
@@ -828,12 +832,6 @@ async def cancel_webapp2_editing(message: types.Message, state: FSMContext):
         f"Валюта: {app.get('currency', '')}",
         f"Бажана ціна: {app.get('price', '')}"
     ]
-    status = app.get("proposal_status", "")
-    if status == "confirmed":
-        details.append(f"Пропозиція ціни: {app.get('proposal', '—')}")
-        details.append("Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться")
-    elif status == "Agreed":
-        details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
 
     extra = app.get("extra_fields", {})
     if extra:
@@ -841,6 +839,13 @@ async def cancel_webapp2_editing(message: types.Message, state: FSMContext):
         for key, value in extra.items():
             details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
 
+    status = app.get("proposal_status", "")
+    if status == "confirmed":
+        details.append(f"Пропозиція ціни: {app.get('proposal', '—')}")
+        details.append("Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться")
+    elif status == "Agreed":
+        details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
+        
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     if status in ("active", "waiting", "Agreed"):
         kb.add("Переглянути пропозицію")
@@ -948,7 +953,7 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
         update_worksheet2_cells_for_edit_color(sheet_row, changed_fields)
         
         # Записуємо дату/час змін у колонку N (14) таблиці2
-        now_str = datetime.now().strftime("%d.%m.%Y\n%H:%M:%S")
+        now_str = datetime.now(ZoneInfo("Europe/Kiev")).strftime("%d.%m.%Y\n%H:%M:%S")
         ws2 = get_worksheet2()
         cell_address = rowcol_to_a1(sheet_row, 14)
         ws2.update_acell(cell_address, now_str)
@@ -1028,7 +1033,7 @@ async def ask_deletion_confirmation(message: types.Message, state: FSMContext):
 
     culture = user_apps[index].get('culture', 'Невідомо')
     quantity = user_apps[index].get('quantity', 'Невідомо')
-    question = f"Ви хочете видалити заявку {index+1}. {culture} | {quantity} т?\nЦя дія позначить заявку як deleted."
+    question = f"Ви хочете видалити заявку {index+1}. {culture} | {quantity} т?"
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.add("Так", "Ні")
     await message.answer(question, reply_markup=kb)
@@ -1114,12 +1119,6 @@ async def cancel_deletion(message: types.Message, state: FSMContext):
         f"Валюта: {app.get('currency', '')}",
         f"Бажана ціна: {app.get('price', '')}"
     ]
-    status = app.get("proposal_status", "")
-    if status == "confirmed":
-        details.append(f"Пропозиція ціни: {app.get('proposal', '—')}")
-        details.append("Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться")
-    elif status == "Agreed":
-        details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
 
     extra = app.get("extra_fields", {})
     if extra:
@@ -1127,6 +1126,13 @@ async def cancel_deletion(message: types.Message, state: FSMContext):
         for key, value in extra.items():
             details.append(f"{friendly_names.get(key, key.capitalize())}: {value}")
 
+    status = app.get("proposal_status", "")
+    if status == "confirmed":
+        details.append(f"Пропозиція ціни: {app.get('proposal', '—')}")
+        details.append("Ціна була ухвалена, очікуйте, скоро з вами зв'яжуться")
+    elif status == "Agreed":
+        details.append(f"Пропозиція ціни: {app.get('proposal', '')}")
+        
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     if status in ("active", "waiting", "Agreed"):
         kb.add("Переглянути пропозицію")
