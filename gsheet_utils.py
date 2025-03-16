@@ -649,6 +649,28 @@ def update_worksheet1_cells_for_edit(row: int, changed_fields: dict):
         cell_range = f"{rowcol_to_a1(row, col_index)}:{rowcol_to_a1(row, col_index)}"
         format_cell_range(ws, cell_range, yellow_format)
 
+def update_worksheet2_cells_for_edit(sheet_row: int, changed_fields: dict):
+    ws = get_worksheet2()
+    # Припустимо, що карта полів така ж, як для таблиці1:
+    field_map = {
+        "quantity": 8,
+        "payment_form": 11,
+        "currency": 12,
+        "price": 13
+    }
+    for key, val in changed_fields.items():
+        if key not in field_map:
+            continue
+        col_index = field_map[key]
+        if key == "quantity":
+            if val:
+                val = f"{val} Т"
+            ws.update_cell(sheet_row, col_index, val)
+        else:
+            ws.update_cell(sheet_row, col_index, val)
+        cell_range = f"{rowcol_to_a1(sheet_row, col_index)}:{rowcol_to_a1(sheet_row, col_index)}"
+        format_cell_range(ws, cell_range, yellow_format)
+
 async def re_run_autocalc_for_app(uid: str, index: int):
     """
     Після редагування заявки перезапустити логіку:
