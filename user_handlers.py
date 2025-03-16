@@ -25,7 +25,7 @@ from gsheet_utils import (
     color_cell_yellow, delete_price_cell_in_table2,
     get_worksheet1, get_worksheet2,
     color_entire_row_green, color_entire_row_red,
-    update_worksheet1_cells_for_edit, re_run_autocalc_for_app, rowcol_to_a1, update_worksheet2_cells_for_edit
+    update_worksheet1_cells_for_edit, re_run_autocalc_for_app, rowcol_to_a1, update_worksheet2_cells_for_edit_color
 )
 
 
@@ -945,7 +945,7 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
     if changed_fields:
         # Оновлюємо таблицю1 (жовте підсвічування)
         update_worksheet1_cells_for_edit(sheet_row, changed_fields)
-        update_worksheet2_cells_for_edit(sheet_row, changed_fields)
+        update_worksheet2_cells_for_edit_color(sheet_row, changed_fields)
         
         # Записуємо дату/час змін у колонку N (14) таблиці2
         now_str = datetime.now().strftime("%d.%m.%Y\n%H:%M:%S")
