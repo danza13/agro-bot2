@@ -707,7 +707,11 @@ async def re_run_autocalc_for_app(uid: str, index: int):
         if chat_id:
             culture = app.get("culture", "Невідомо")
             quantity = app.get("quantity", "Невідомо")
-            msg = f"Після редагування даних сформована нова пропозиція для Вашої заявки: {new_bot_price}\n({culture}, {quantity})"
+            msg = (
+                    f"Після редагування даних сформована нова пропозиція для Вашої заявки: {new_bot_price}\n"
+                    f"({culture}, {quantity})\n\n"
+                    "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                )
             try:
                 await asyncio.sleep(1)  # Легка затримка, щоб не було «хвилею»
                 from loader import bot
