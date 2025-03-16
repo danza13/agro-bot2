@@ -226,23 +226,26 @@ async def topicality_actual(message: types.Message, state: FSMContext):
     from gsheet_utils import get_worksheet2, rowcol_to_a1
     uid = str(message.from_user.id)
     apps = load_applications()
-    if uid in apps:
-        for app in apps[uid]:
-            if app.get("topicality_notification_sent"):
-                sheet_row = app.get("sheet_row")
-                if sheet_row:
-                    now_str = datetime.now(ZoneInfo("Europe/Kiev")).strftime("%d.%m.%Y\n%H:%M:%S")
-                    try:
-                        ws2 = get_worksheet2()
-                        cell_address = rowcol_to_a1(sheet_row, 15)  # Колонка O (15)
-                        ws2.update_acell(cell_address, now_str)
-                    except Exception as e:
-                        logging.exception(e)
-                # Скидаємо flag, щоб сповіщення не надсилалось повторно
-                app["topicality_notification_sent"] = False
-        save_applications(apps)
+    # Знайдемо ту заявку, яка знаходиться в процесі уточнення
+    for app in apps.get(uid, []):
+        if app.get("topicality_in_progress"):
+            sheet_row = app.get("sheet_row")
+            if sheet_row:
+                now_str = datetime.now(ZoneInfo("Europe/Kiev")).strftime("%d.%m.%Y\n%H:%M:%S")
+                try:
+                    ws2 = get_worksheet2()
+                    # Запис у стовпець O (наприклад, col=15 або 14, залежно від вашої логіки)
+                    cell_address = rowcol_to_a1(sheet_row, 15)
+                    ws2.update_acell(cell_address, now_str)
+                except Exception as e:
+                    logging.exception(e)
+            # Знімаємо прапорець
+            app["topicality_in_progress"] = False
+    save_applications(apps)
     await state.finish()
     await message.answer("Заявка підтверджена як актуальна.", reply_markup=get_main_menu_keyboard())
+    # Запланувати через 10 секунд перевірку наступного сповіщення для цього користувача
+    asyncio.create_task(schedule_next_topicality(message.from_user.id))
 
 @dp.message_handler(Text(equals="Потребує змін"), state=ApplicationStates.viewing_topicality)
 async def topicality_edit(message: types.Message, state: FSMContext):
@@ -308,8 +311,7 @@ async def topicality_delete_confirm(message: types.Message, state: FSMContext):
     apps = load_applications()
     if uid in apps:
         for app in apps[uid]:
-            if app.get("topicality_notification_sent"):
-                # Призначаємо статус заявки як deleted
+            if app.get("topicality_in_progress"):
                 app["proposal_status"] = "deleted"
                 sheet_row = app.get("sheet_row")
                 if sheet_row:
@@ -321,10 +323,11 @@ async def topicality_delete_confirm(message: types.Message, state: FSMContext):
                         color_entire_row_red(ws2, sheet_row)
                     except Exception as e:
                         logging.exception(e)
-                app["topicality_notification_sent"] = False
+                app["topicality_in_progress"] = False
     save_applications(apps)
     await state.finish()
     await message.answer("Ваша заявка видалена.", reply_markup=get_main_menu_keyboard())
+    asyncio.create_task(schedule_next_topicality(message.from_user.id))
 
 @dp.message_handler(Text(equals="Ні"), state=ApplicationStates.topicality_deletion_confirmation)
 async def topicality_delete_cancel(message: types.Message, state: FSMContext):
