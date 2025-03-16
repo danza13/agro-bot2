@@ -626,7 +626,7 @@ async def delete_after_rejection(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-@dp.message_handler(Text(equals="Підтвердити"), state=ApplicationStates.viewing_application)
+@dp.message_handler(Text(equals="Підтвердити"), state=ApplicationStates.viewing_proposal)
 async def confirm_proposal(message: types.Message, state: FSMContext):
     data = await state.get_data()
     index = data.get("selected_app_index")
