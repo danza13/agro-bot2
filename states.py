@@ -17,11 +17,13 @@ class ApplicationStates(StatesGroup):
     viewing_application = State()            # Перегляд детально однієї заявки
     viewing_proposal = State()               # Перегляд пропозиції
     proposal_reply = State()                 # Підтвердити/Відхилити пропозицію
-    # Нові стани для редагування/видалення
     editing_choice = State()                 # Кнопки: "Відкрити форму редагування" / "Скасувати"
     waiting_for_webapp2_data = State()       # Чекаємо даних зі скороченого WebApp2
     deletion_confirmation = State()          # Підтвердження видалення заявки
-
+    viewing_topicality = State()            # Створення сповіщення (запит: "Ваша заявка ... актуальна?")
+    topicality_editing = State()            # Обробка натискання "Потребує змін"
+    topicality_deletion_confirmation = State()  # Обробка видалення заявки
+    
 class AdminMenuStates(StatesGroup):
     choosing_section = State()
     moderation_section = State()
