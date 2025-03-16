@@ -945,7 +945,8 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
     if changed_fields:
         # Оновлюємо таблицю1 (жовте підсвічування)
         update_worksheet1_cells_for_edit(sheet_row, changed_fields)
-
+        update_worksheet2_cells_for_edit(sheet_row, changed_fields)
+        
         # Записуємо дату/час змін у колонку N (14) таблиці2
         now_str = datetime.now().strftime("%d.%m.%Y\n%H:%M:%S")
         ws2 = get_worksheet2()
