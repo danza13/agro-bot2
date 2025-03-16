@@ -33,46 +33,56 @@ def resume_polling():
 async def poll_topicality_notifications():
     """
     Фонове завдання:
-    - Щосекунди/хвилини перевіряє всі заявки у файлі.
-    - Якщо заявка (зі статусом active/ waiting) була створена більше 24 годин тому
-      і для неї ще не відправлено сповіщення (flag 'topicality_notification_sent' не встановлено),
-      то надсилається повідомлення користувачу з клавіатурою для уточнення актуальності.
-    - Після відправлення в запис заявки додається flag, щоб не надсилати повторно.
+    - Кожну хвилину перевіряє всі заявки.
+    - Для кожного користувача, якщо немає заявки з flag "topicality_in_progress" (тобто користувач вже не в процесі уточнення),
+      шукається наступна заявка (за порядком, наприклад, за часом подачі), що старша за 24 години і для якої ще не
+      було надіслано сповіщення.
+    - Якщо така заявка знайдена, вона помічається як "topicality_in_progress": True і сповіщення надсилається.
     """
     while True:
         apps = load_applications()
         now = datetime.now()
+        # Для кожного користувача
         for uid, app_list in apps.items():
-            for i, app in enumerate(app_list):
-                status = app.get("proposal_status", "active")
-                # Опрацьовуємо лише активні/ waiting заявки
-                if status not in ("active", "waiting"):
-                    continue
-                # Якщо уже відправлено сповіщення – пропускаємо
-                if app.get("topicality_notification_sent"):
-                    continue
+            # Якщо у користувача вже є заявка з "topicality_in_progress" = True – пропускаємо
+            if any(app.get("topicality_in_progress") for app in app_list):
+                continue
+
+            # Знаходимо заявку, що ще не була надіслана (topicality_notification_sent не True) та старша за 24 години
+            pending_app = None
+            pending_index = None
+            for idx, app in enumerate(app_list):
+                if app.get("proposal_status", "active") not in ("active", "waiting"):
+                    continue  # опрацьовуємо тільки активні/waiting заявки
                 try:
                     submission_time = datetime.fromisoformat(app["timestamp"])
                 except Exception:
                     continue
-                if now - submission_time >= timedelta(hours=24):
-                    # Формуємо повідомлення. Використовуємо індексацію (i+1) для номера заявки.
-                    msg_text = (
-                        f"Ваша заявка {i+1}. {app.get('culture', 'Невідомо')} | {app.get('quantity', 'Невідомо')} т "
-                        "актуальна, чи потребує змін або видалення?"
+                if now - submission_time >= timedelta(hours=24) and not app.get("topicality_notification_sent", False):
+                    # Вибираємо найстаршу заявку (або за порядком)
+                    pending_app = app
+                    pending_index = idx
+                    break  # беремо першу таку заявку
+
+            if pending_app is not None:
+                # Позначаємо, що для цієї заявки сповіщення зараз в процесі (і flag notification_sent = True)
+                apps[uid][pending_index]["topicality_notification_sent"] = True
+                apps[uid][pending_index]["topicality_in_progress"] = True
+                # Формуємо повідомлення (номер заявки – беремо індекс+1, culture, quantity)
+                msg_text = (
+                    f"Ваша заявка {pending_index+1}. {pending_app.get('culture', 'Невідомо')} | "
+                    f"{pending_app.get('quantity', 'Невідомо')} т актуальна, чи потребує змін або видалення?"
+                )
+                try:
+                    await bot.send_message(
+                        pending_app.get("chat_id"),
+                        msg_text,
+                        reply_markup=get_topicality_keyboard()
                     )
-                    try:
-                        await bot.send_message(
-                            app.get("chat_id"),
-                            msg_text,
-                            reply_markup=get_topicality_keyboard()
-                        )
-                        # Позначаємо, що сповіщення для цієї заявки вже відправлено
-                        app["topicality_notification_sent"] = True
-                    except Exception as e:
-                        logging.exception(f"Помилка надсилання topicality сповіщення для uid={uid}: {e}")
+                except Exception as e:
+                    logging.exception(f"Помилка надсилання topicality сповіщення для uid={uid}: {e}")
         save_applications(apps)
-        await asyncio.sleep(60)  # Перевіряти кожну хвилину
+        await asyncio.sleep(60)  # перевіряти кожну хвилину
         
         
 ########################################################
@@ -188,6 +198,41 @@ async def poll_manager_proposals():
             logging.exception(f"Помилка у фоні: {e}")
         await asyncio.sleep(CHECK_INTERVAL)
 
+async def schedule_next_topicality(user_id: int):
+    # Чекаємо 10 секунд після завершення вибору
+    await asyncio.sleep(10)
+    # Викликаємо перевірку для цього користувача
+    apps = load_applications()
+    uid = str(user_id)
+    # Якщо вже немає заявки з "topicality_in_progress", спробуємо відправити наступну
+    if uid in apps:
+        user_apps = apps[uid]
+        # Якщо немає жодної заявки, нічого не робимо
+        if not user_apps:
+            return
+        # Якщо жодна заявка не має прапорця "topicality_in_progress" і існує заявка, що потребує сповіщення,
+        # надсилаємо сповіщення для першої, що відповідає умовам.
+        if not any(app.get("topicality_in_progress") for app in user_apps):
+            for idx, app in enumerate(user_apps):
+                if app.get("proposal_status", "active") in ("active", "waiting") and not app.get("topicality_notification_sent", False):
+                    # Перевіряємо, чи заявка старша 24 години
+                    try:
+                        submission_time = datetime.fromisoformat(app["timestamp"])
+                    except Exception:
+                        continue
+                    if datetime.now() - submission_time >= timedelta(hours=24):
+                        app["topicality_notification_sent"] = True
+                        app["topicality_in_progress"] = True
+                        msg_text = (
+                            f"Ваша заявка {idx+1}. {app.get('culture', 'Невідомо')} | "
+                            f"{app.get('quantity', 'Невідомо')} т актуальна, чи потребує змін або видалення?"
+                        )
+                        try:
+                            await bot.send_message(app.get("chat_id"), msg_text, reply_markup=get_topicality_keyboard())
+                        except Exception as e:
+                            logging.exception(e)
+                        break  # надсилаємо лише одне сповіщення
+            save_applications(apps)
 
 
 ########################################################
