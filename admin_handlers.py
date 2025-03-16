@@ -544,11 +544,19 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
                 await message.answer("У таблиці немає заявок.", reply_markup=get_admin_requests_menu())
                 return
             kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            temp_row = []  # список для накопичення кнопок
             for i, row in enumerate(rows[1:], start=2):
                 if row and row[0].strip():
                     request_number = row[0].strip()
                     btn_text = f"{request_number} (рядок {i})"
-                    kb.add(btn_text)
+                    temp_row.append(btn_text)
+                    # Коли накопичено 3 кнопки, додати їх як один рядок
+                    if len(temp_row) == 3:
+                        kb.row(*temp_row)
+                        temp_row = []
+            # Додати залишок кнопок, якщо є
+            if temp_row:
+                kb.row(*temp_row)
             kb.add("Назад")
             await message.answer("Оберіть заявку для видалення:", reply_markup=kb)
             await AdminReview.confirm_deletion_app.set()
@@ -638,11 +646,49 @@ async def confirm_deletion_yes(message: types.Message, state: FSMContext):
         return
     success = await admin_remove_app_permanently(int(uid), app_index)
     if success:
-        await message.answer(f"Заявку з рядка {row_number} успішно видалено.", reply_markup=get_admin_requests_menu())
+        # Після видалення перезавантажуємо список "видалених" заявок
+        apps = load_applications()
+        deleted_apps = []
+        for user_id, user_apps in apps.items():
+            for idx, app_data in enumerate(user_apps):
+                if app_data.get("proposal_status") == "deleted":
+                    deleted_apps.append({
+                        "user_id": user_id,
+                        "app_index": idx,
+                        "app_data": app_data
+                    })
+        # Формуємо клавіатуру для списку видалених заявок з 3 кнопками в рядку
+        if deleted_apps:
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            temp_row = []
+            for i, entry in enumerate(deleted_apps, start=1):
+                culture = entry["app_data"].get("culture", "Невідомо")
+                quantity = entry["app_data"].get("quantity", "Невідомо")
+                btn_text = f"{i}. {culture} | {quantity}"
+                temp_row.append(btn_text)
+                if len(temp_row) == 3:
+                    kb.row(*temp_row)
+                    temp_row = []
+            if temp_row:
+                kb.row(*temp_row)
+            kb.add("Назад")
+            await state.update_data(deleted_apps=deleted_apps, from_requests_menu=True)
+            await message.answer(
+                f"Заявку з рядка {row_number} успішно видалено.\nОберіть заявку зі списку для подальших дій:",
+                reply_markup=kb
+            )
+        else:
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            kb.add("Назад")
+            await message.answer(
+                f"Заявку з рядка {row_number} успішно видалено.\nБільше немає заявок, позначених як 'видалені'.",
+                reply_markup=kb
+            )
+        # Встановлюємо стан для перегляду списку видалених заявок
+        await AdminReview.viewing_deleted_list.set()
     else:
         await message.answer("Помилка видалення заявки.", reply_markup=get_admin_requests_menu())
-    await AdminMenuStates.requests_section.set()
-    await state.finish()
+        await AdminMenuStates.requests_section.set()
 
 
 ############################################
