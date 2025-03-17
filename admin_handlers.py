@@ -1,4 +1,4 @@
-#admin_handlers.py
+# admin_handlers.py
 import re
 import logging
 import asyncio
@@ -22,7 +22,6 @@ from gsheet_utils import (
     export_database, admin_remove_app_permanently,
     get_worksheet1, get_worksheet2, delete_price_cell_in_table2
 )
-
 
 ############################################
 # Функція видалення заявки з повною логікою
@@ -120,7 +119,7 @@ async def admin_menu_choosing_section(message: types.Message, state: FSMContext)
         await state.finish()
         await message.answer("Вихід з адмін-меню. Повертаємось у звичайне меню:", reply_markup=get_main_menu_keyboard())
     else:
-        await message.answer("Будь ласка, оберіть із меню: «Модерація», «Заявки» або «Вийти з адмін-меню».") 
+        await message.answer("Будь ласка, оберіть із меню: «Модерація», «Заявки» або «Вийти з адмін-меню».")
 
 
 ############################################
@@ -346,7 +345,7 @@ async def handle_mass_mailing_prompt(message: types.Message, state: FSMContext):
     kb.add("Скасувати")
     await message.answer("Відправте текст для розсилки", reply_markup=kb)
     await AdminReview.sending_mass_message.set()
-    
+
 
 @dp.message_handler(state=AdminReview.sending_mass_message)
 async def process_mass_mailing(message: types.Message, state: FSMContext):
@@ -626,6 +625,7 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
         await state.update_data(confirmed_apps=confirmed_apps, from_requests_menu=True)
         await AdminReview.viewing_confirmed_list.set()
         await message.answer("Список підтверджених заявок:", reply_markup=kb)
+
     elif text == "Видалені":
         apps = load_applications()
         deleted_apps = []
@@ -656,6 +656,7 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
         await state.update_data(deleted_apps=deleted_apps, from_requests_menu=True)
         await AdminReview.viewing_deleted_list.set()
         await message.answer("Список «видалених» заявок:", reply_markup=kb)
+
     elif text == "Видалення заявок":
         try:
             ws = get_worksheet1()
@@ -681,6 +682,7 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
         except Exception as e:
             logging.exception("Помилка отримання заявок з Google Sheets")
             await message.answer("Помилка отримання заявок.", reply_markup=get_admin_requests_menu())
+
     elif text == "Редагування заявок":
         apps = load_applications()
         users_with_active_apps = {}
@@ -700,9 +702,30 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
         await state.update_data(editing_users=users_with_active_apps)
         await message.answer("Оберіть користувача для редагування заявок:", reply_markup=kb)
         await AdminReview.editing_applications_list.set()
+
+    # Ось тут додаємо пункт «Ціна бота»:
+    elif text == "Ціна бота":
+        # Імпортуємо глобальну змінну з bot.py:
+        from bot import AUTO_CALC_ENABLED
+        status_text = "Увімкнена" if AUTO_CALC_ENABLED else "Вимкнена"
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        # Додаємо кнопку залежно від стану
+        if AUTO_CALC_ENABLED:
+            kb.add("Вимкнути автопрайс")
+        else:
+            kb.add("Увімкнути автопрайс")
+        kb.add("Назад")
+        await message.answer(
+            f"Функція автоматичного прорахунку ціни ботом: {status_text}",
+            reply_markup=kb
+        )
+        # Переходимо в стан auto_price_section
+        await AdminReview.auto_price_section.set()
+
     elif text == "Назад":
         await message.answer("Головне меню адміна:", reply_markup=get_admin_root_menu())
         await AdminMenuStates.choosing_section.set()
+
     else:
         await message.answer("Оберіть дію: «Підтверджені», «Видалені», «Редагування заявок», «Видалення заявок» або «Назад».")
 
@@ -1019,7 +1042,7 @@ async def admin_view_deleted_app_handler(message: types.Message, state: FSMConte
             await message.answer("Помилка: Заявка не знайдена або вже була видалена.", reply_markup=get_admin_requests_menu())
         await AdminMenuStates.requests_section.set()
     else:
-        await message.answer("Оберіть «Видалити назавжди» або «Назад».") 
+        await message.answer("Оберіть «Видалити назавжди» або «Назад».")
 
 
 ############################################
@@ -1160,3 +1183,37 @@ async def editing_app_status_back(message: types.Message, state: FSMContext):
     kb.add("Назад")
     await message.answer("Список заявок користувача:", reply_markup=kb)
     await AdminReview.editing_single_application.set()
+
+
+############################################
+# УПРАВЛІННЯ «ЦІНОЮ БОТА»
+############################################
+
+@dp.message_handler(lambda m: m.text in ["Увімкнути автопрайс", "Вимкнути автопрайс"], state=AdminReview.auto_price_section)
+async def toggle_auto_price(message: types.Message, state: FSMContext):
+    from bot import AUTO_CALC_ENABLED
+    global AUTO_CALC_ENABLED
+
+    if message.text == "Увімкнути автопрайс":
+        AUTO_CALC_ENABLED = True
+    else:
+        AUTO_CALC_ENABLED = False
+
+    status_text = "Увімкнена" if AUTO_CALC_ENABLED else "Вимкнена"
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if AUTO_CALC_ENABLED:
+        kb.add("Вимкнути автопрайс")
+    else:
+        kb.add("Увімкнути автопрайс")
+    kb.add("Назад")
+    await message.answer(
+        f"Функція автоматичного прорахунку ціни ботом: {status_text}",
+        reply_markup=kb
+    )
+
+
+@dp.message_handler(Text(equals="Назад"), state=AdminReview.auto_price_section)
+async def back_to_requests_section(message: types.Message, state: FSMContext):
+    # Повертаємось до розділу 'Заявки'
+    await message.answer("Розділ 'Заявки':", reply_markup=get_admin_requests_menu())
+    await AdminMenuStates.requests_section.set()
