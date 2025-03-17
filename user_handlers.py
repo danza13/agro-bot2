@@ -32,6 +32,23 @@ from gsheet_utils import (
 )
 
 
+# Допоміжна функція для формування деталей заявки при уточненні актуальності
+def build_topicality_details(app: dict) -> str:
+    """Формує рядок з деталями заявки для сповіщення про уточнення актуальності."""
+    timestamp = app.get("timestamp", "")
+    try:
+        dt = datetime.fromisoformat(timestamp)
+        formatted_date = dt.strftime("%d.%m.%Y")
+    except Exception:
+        formatted_date = timestamp
+    details = (
+        f"Дата створення: {formatted_date}\n"
+        f"ФГ: {app.get('fgh_name', 'Невідомо')}\n"
+        f"Культура: {app.get('culture', 'Невідомо')}\n"
+        f"Кількість: {app.get('quantity', 'Невідомо')} т"
+    )
+    return details
+
 ############################################
 # РЕЄСТРАЦІЯ КОРИСТУВАЧА (/start)
 ############################################
@@ -40,15 +57,18 @@ from gsheet_utils import (
 async def cmd_start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     uid = str(user_id)
-    # Перевірка, чи є у користувача активна заявка з процесом уточнення (topicality)
     apps = load_applications()
+    # Якщо є активна заявка з процесом уточнення, відправляємо деталі та потрібну клавіатуру
     if uid in apps:
         for app in apps[uid]:
             if app.get("topicality_in_progress"):
+                details = build_topicality_details(app)
+                kb = get_topicality_keyboard()  # Клавіатура з кнопками «Актуальна», «Потребує змін», «Видалити»
                 await message.answer(
-                    "У вас відкрито процес уточнення актуальності заявки. "
-                    "Будь ласка, завершіть його (натисніть «Актуальна», «Потребує змін» або «Видалити») перед використанням /start.",
-                    reply_markup=remove_keyboard()
+                    "У вас відкрито процес уточнення актуальності заявки.\n\n" +
+                    details +
+                    "\n\nБудь ласка, завершіть його, обравши одну з опцій:",
+                    reply_markup=kb
                 )
                 return
 
@@ -68,6 +88,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     await message.answer("Введіть, будь ласка, своє ПІБ (повністю).", reply_markup=remove_keyboard())
     await RegistrationStates.waiting_for_fullname.set()
+
 
 
 @dp.message_handler(state=RegistrationStates.waiting_for_fullname)
@@ -211,20 +232,22 @@ async def return_to_editing_menu(message: types.Message, state: FSMContext):
 ############################################
 # /menu та /support
 ############################################
-
 @dp.message_handler(commands=["menu"], state="*")
 async def show_menu(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     uid = str(user_id)
-    # Перевірка активного уточнення заявки
     apps = load_applications()
+    # Якщо є активна заявка з процесом уточнення, відправляємо деталі заявки та клавіатуру
     if uid in apps:
         for app in apps[uid]:
             if app.get("topicality_in_progress"):
+                details = build_topicality_details(app)
+                kb = get_topicality_keyboard()
                 await message.answer(
-                    "У вас відкрито процес уточнення актуальності заявки. "
-                    "Будь ласка, завершіть його (натисніть «Актуальна», «Потребує змін» або «Видалити») перед використанням команди /menu.",
-                    reply_markup=remove_keyboard()
+                    "У вас відкрито процес уточнення актуальності заявки.\n\n" +
+                    details +
+                    "\n\nБудь ласка, завершіть його, обравши одну з опцій:",
+                    reply_markup=kb
                 )
                 return
 
@@ -235,20 +258,22 @@ async def show_menu(message: types.Message, state: FSMContext):
         return
     await message.answer("Головне меню:", reply_markup=get_main_menu_keyboard())
 
-
 @dp.message_handler(commands=["support"], state="*")
 async def support_command(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     uid = str(user_id)
-    # Перевірка активного уточнення заявки
     apps = load_applications()
+    # Якщо є активна заявка з процесом уточнення, відправляємо деталі заявки та клавіатуру
     if uid in apps:
         for app in apps[uid]:
             if app.get("topicality_in_progress"):
+                details = build_topicality_details(app)
+                kb = get_topicality_keyboard()
                 await message.answer(
-                    "У вас відкрито процес уточнення актуальності заявки. "
-                    "Будь ласка, завершіть його (натисніть «Актуальна», «Потребує змін» або «Видалити») перед використанням команди /support.",
-                    reply_markup=remove_keyboard()
+                    "У вас відкрито процес уточнення актуальності заявки.\n\n" +
+                    details +
+                    "\n\nБудь ласка, завершіть його, обравши одну з опцій:",
+                    reply_markup=kb
                 )
                 return
 
