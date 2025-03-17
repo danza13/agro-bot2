@@ -223,10 +223,12 @@ async def support_command(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Актуальна"), state=ApplicationStates.viewing_topicality)
 async def topicality_actual(message: types.Message, state: FSMContext):
+    logging.info(f"[TOPICALITY] Користувач {message.from_user.id} натиснув 'Актуальна'")
     from gsheet_utils import get_worksheet2, rowcol_to_a1
     uid = str(message.from_user.id)
     apps = load_applications()
-    # Знайдемо ту заявку, яка знаходиться в процесі уточнення
+    updated = False
+    # Знайдемо заявку, що зараз в процесі уточнення
     for app in apps.get(uid, []):
         if app.get("topicality_in_progress"):
             sheet_row = app.get("sheet_row")
@@ -234,24 +236,28 @@ async def topicality_actual(message: types.Message, state: FSMContext):
                 now_str = datetime.now(ZoneInfo("Europe/Kiev")).strftime("%d.%m.%Y\n%H:%M:%S")
                 try:
                     ws2 = get_worksheet2()
-                    # Запис у стовпець O (наприклад, col=15 або 14, залежно від вашої логіки)
                     cell_address = rowcol_to_a1(sheet_row, 15)
                     ws2.update_acell(cell_address, now_str)
+                    logging.debug(f"[TOPICALITY] Записано дату/час {now_str} у клітинку {cell_address}")
                 except Exception as e:
-                    logging.exception(e)
-            # Знімаємо прапорець
+                    logging.exception(f"[TOPICALITY] Помилка при оновленні клітинки {cell_address}: {e}")
             app["topicality_in_progress"] = False
-    save_applications(apps)
+            updated = True
+    if updated:
+        save_applications(apps)
+        logging.info(f"[TOPICALITY] Статус заявки для користувача {uid} оновлено (знято topicality_in_progress)")
+    else:
+        logging.info(f"[TOPICALITY] Нічого не оновлено для користувача {uid}")
     await state.finish()
     await message.answer("Заявка підтверджена як актуальна.", reply_markup=get_main_menu_keyboard())
-    # Запланувати через 10 секунд перевірку наступного сповіщення для цього користувача
+    # Запланувати наступну перевірку через 10 секунд
     asyncio.create_task(schedule_next_topicality(message.from_user.id))
 
 @dp.message_handler(Text(equals="Потребує змін"), state=ApplicationStates.viewing_topicality)
 async def topicality_edit(message: types.Message, state: FSMContext):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    logging.info(f"[TOPICALITY] Користувач {message.from_user.id} натиснув 'Потребує змін'")
+    kb = get_topicality_keyboard()  # Можна створити окрему клавіатуру для цього
     kb.row("Форма редагування", "Назад")
-    # Записуємо в дані стану, що обрана дія редагування
     await state.update_data(topicality_action="edit")
     await message.answer("Відредагуйте заявку в формі:", reply_markup=kb)
     await ApplicationStates.topicality_editing.set()
@@ -299,6 +305,7 @@ async def open_edit_form(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Видалити"), state=ApplicationStates.viewing_topicality)
 async def topicality_delete(message: types.Message, state: FSMContext):
+    logging.info(f"[TOPICALITY] Користувач {message.from_user.id} натиснув 'Видалити'")
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.add("Так", "Ні")
     await state.update_data(topicality_action="delete")
@@ -307,6 +314,7 @@ async def topicality_delete(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Так"), state=ApplicationStates.topicality_deletion_confirmation)
 async def topicality_delete_confirm(message: types.Message, state: FSMContext):
+    logging.info(f"[TOPICALITY] Користувач {message.from_user.id} підтвердив видалення заявки")
     uid = str(message.from_user.id)
     apps = load_applications()
     if uid in apps:
@@ -321,8 +329,9 @@ async def topicality_delete_confirm(message: types.Message, state: FSMContext):
                         ws2 = get_worksheet2()
                         color_entire_row_red(ws1, sheet_row)
                         color_entire_row_red(ws2, sheet_row)
+                        logging.debug(f"[TOPICALITY] Рядок {sheet_row} зафарбовано у червоний")
                     except Exception as e:
-                        logging.exception(e)
+                        logging.exception(f"[TOPICALITY] Помилка фарбування рядка {sheet_row}: {e}")
                 app["topicality_in_progress"] = False
     save_applications(apps)
     await state.finish()
@@ -331,12 +340,10 @@ async def topicality_delete_confirm(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Ні"), state=ApplicationStates.topicality_deletion_confirmation)
 async def topicality_delete_cancel(message: types.Message, state: FSMContext):
-    # Повертаємо користувача до основної клавіатури уточнення
+    logging.info(f"[TOPICALITY] Користувач {message.from_user.id} скасував видалення заявки")
     await state.set_state(ApplicationStates.viewing_topicality)
-    await message.answer(
-        "Ваша заявка актуальна, чи потребує змін або видалення?",
-        reply_markup=get_topicality_keyboard()
-    )
+    await message.answer("Ваша заявка актуальна, чи потребує змін або видалення?", reply_markup=get_topicality_keyboard())
+
 
 ############################################
 # "Подати заявку" та "Переглянути мої заявки"
