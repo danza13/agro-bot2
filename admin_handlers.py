@@ -1199,6 +1199,8 @@ async def toggle_auto_price(message: types.Message, state: FSMContext):
     else:
         AUTO_CALC_ENABLED = False
 
+    save_auto_calc_setting(AUTO_CALC_ENABLED)
+    
     status_text = "Увімкнена" if AUTO_CALC_ENABLED else "Вимкнена"
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     if AUTO_CALC_ENABLED:
