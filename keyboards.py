@@ -25,6 +25,7 @@ def get_admin_requests_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row("Підтверджені", "Видалені")
     kb.add("Видалення заявок", "Редагування заявок")
+    kb.add("Ціна бота")
     kb.add("Назад")
     return kb
     
