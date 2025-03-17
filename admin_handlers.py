@@ -1194,19 +1194,14 @@ async def editing_app_status_back(message: types.Message, state: FSMContext):
 
 @dp.message_handler(lambda m: m.text in ["Увімкнути автопрайс", "Вимкнути автопрайс"], state=AdminReview.auto_price_section)
 async def toggle_auto_price(message: types.Message, state: FSMContext):
-    from bot import AUTO_CALC_ENABLED
-    global AUTO_CALC_ENABLED
-
-    if message.text == "Увімкнути автопрайс":
-        AUTO_CALC_ENABLED = True
-    else:
-        AUTO_CALC_ENABLED = False
-
-    save_auto_calc_setting(AUTO_CALC_ENABLED)
+    # Визначаємо новий стан залежно від отриманого тексту
+    new_status = True if message.text == "Увімкнути автопрайс" else False
+    # Записуємо новий стан у файл
+    save_auto_calc_setting(new_status)
     
-    status_text = "Увімкнена" if AUTO_CALC_ENABLED else "Вимкнена"
+    status_text = "Увімкнена" if new_status else "Вимкнена"
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    if AUTO_CALC_ENABLED:
+    if new_status:
         kb.add("Вимкнути автопрайс")
     else:
         kb.add("Увімкнути автопрайс")
