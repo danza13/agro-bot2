@@ -17,7 +17,7 @@ from config import ADMINS, friendly_names
 from states import (
     RegistrationStates, ApplicationStates
 )
-from keyboards import remove_keyboard, get_main_menu_keyboard
+from keyboards import remove_keyboard, get_main_menu_keyboard, get_topicality_keyboard
 from db import (
     load_users, save_users,
     load_applications, save_applications,
