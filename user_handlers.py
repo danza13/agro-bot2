@@ -320,7 +320,6 @@ async def topicality_actual(message: types.Message, state: FSMContext):
 @dp.message_handler(Text(equals="Потребує змін"), state=ApplicationStates.viewing_topicality)
 async def topicality_edit(message: types.Message, state: FSMContext):
     logging.info(f"[TOPICALITY] Користувач {message.from_user.id} натиснув 'Потребує змін'")
-    kb = get_topicality_keyboard()  # Можна створити окрему клавіатуру для цього
     kb.row("Форма редагування", "Назад")
     await state.update_data(topicality_action="edit")
     await message.answer("Відредагуйте заявку в формі:", reply_markup=kb)
