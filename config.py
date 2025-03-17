@@ -28,6 +28,8 @@ SHEET2_NAME_2 = os.getenv("SHEET2_NAME_2", "Ціни")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL_SECONDS", "60"))
 API_PORT = int(os.getenv("API_PORT", "8080"))
 
+TOPICALITY_SECONDS = int(os.getenv("TOPYCALITY_SECONDS", "86400"))  # За замовчуванням 86400 сек (24 години)
+
 # API-ключ для Routes API
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 # Координати Одеси
