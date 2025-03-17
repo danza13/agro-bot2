@@ -1,6 +1,7 @@
 import json, os
+from config import DATA_DIR
 
-AUTO_CALC_FILE = "auto_calc.json"
+AUTO_CALC_FILE = os.path.join(DATA_DIR, "auto_calc.json")
 
 def load_auto_calc_setting() -> bool:
     if os.path.exists(AUTO_CALC_FILE):
