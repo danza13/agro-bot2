@@ -408,6 +408,28 @@ async def topicality_delete_cancel(message: types.Message, state: FSMContext):
     await state.set_state(ApplicationStates.viewing_topicality)
     await message.answer("Ваша заявка актуальна, чи потребує змін або видалення?", reply_markup=get_topicality_keyboard())
 
+@dp.message_handler(state=ApplicationStates.viewing_topicality)
+async def handle_topicality_response(message: types.Message, state: FSMContext):
+    allowed = {"Актуальна", "Потребує змін", "Видалити"}
+    if message.text not in allowed:
+        # Повторно надсилаємо повідомлення з клавіатурою уточнення, не змінюючи стан
+        await message.answer("Будь ласка, завершіть уточнення актуальності, обравши одну з опцій:", reply_markup=get_topicality_keyboard())
+        return
+    # Якщо відповідь правильна, обробляємо її відповідно до логіки
+    if message.text == "Актуальна":
+        # Обробка відповіді "Актуальна"
+        # … (ваша логіка)
+        await state.finish()
+        await message.answer("Заявка підтверджена як актуальна.", reply_markup=get_main_menu_keyboard())
+    elif message.text == "Потребує змін":
+        # Перехід до редагування
+        await message.answer("Відредагуйте заявку, використовуючи форму.", reply_markup=...)
+        await state.set_state(ApplicationStates.topicality_editing)
+    elif message.text == "Видалити":
+        # Логіка видалення
+        await message.answer("Ви хочете видалити заявку? Натисніть 'Так' для підтвердження.", reply_markup=...)
+        await state.set_state(ApplicationStates.topicality_deletion_confirmation)
+
 
 ############################################
 # "Подати заявку" та "Переглянути мої заявки"
