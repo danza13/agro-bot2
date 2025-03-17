@@ -154,12 +154,14 @@ async def poll_manager_proposals():
                                     msg = (
                                         f"Ціна по заявці {idx+1}. {culture} | {quantity} т змінилась з "
                                         f"{previous_proposal} на {current_manager_price_str}\n\n"
-                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
+                                        "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
                                     )
                                 else:
                                     msg = (
                                         f"Для Вашої заявки оновлено пропозицію: {current_manager_price_str}\n\n"
-                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
+                                        "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
                                     )
                                 try:
                                     await bot.send_message(app.get("chat_id"), msg)
@@ -168,7 +170,8 @@ async def poll_manager_proposals():
             save_applications(apps)
 
             # 2) Розрахунок автоматичної (ботової) ціни
-            if AUTO_CALC_ENABLED:
+            # Зчитуємо актуальне налаштування з файлу безпосередньо перед розрахунком:
+            if load_auto_calc_setting():
                 updated_apps = load_applications()
                 changed = False
                 for uid, app_list in updated_apps.items():
