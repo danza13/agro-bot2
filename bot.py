@@ -21,6 +21,7 @@ import admin_handlers
 import user_handlers
 
 POLLING_PAUSED = False
+AUTO_CALC_ENABLED = True  # за замовчуванням вмикаємо
 
 def pause_polling():
     global POLLING_PAUSED
@@ -88,6 +89,7 @@ async def poll_topicality_notifications():
 ########################################################
 # Фонова перевірка manager_price + bot_price
 ########################################################
+# Приклад:
 async def poll_manager_proposals():
     """
     Фонове завдання:
@@ -134,9 +136,11 @@ async def poll_manager_proposals():
                             except ValueError:
                                 previous_price = None
 
-                            # Якщо попередньої ціни немає або вона відрізняється від нової, оновлюємо дані
+                            # Якщо попередньої ціни немає або вона відрізняється від нової, оновлюємо
                             if previous_price is None or previous_price != new_price:
-                                app["original_manager_price"] = str(previous_price) if previous_price is not None else ""
+                                app["original_manager_price"] = (
+                                    str(previous_price) if previous_price is not None else ""
+                                )
                                 app["proposal"] = current_manager_price_str
                                 app["proposal_status"] = "Agreed"
                                 if status == "waiting":
@@ -159,43 +163,48 @@ async def poll_manager_proposals():
             save_applications(apps)
 
             # 2) Розрахунок автоматичної (ботової) ціни
-            updated_apps = load_applications()
-            changed = False
-            for uid, app_list in updated_apps.items():
-                for idx, app in enumerate(app_list):
-                    status = app.get("proposal_status", "active")
-                    if status in ("deleted", "confirmed", "Agreed"):
-                        continue
-                    # Якщо в таблиці вже є manager_price – пропускаємо
-                    manager_price_in_sheet = app.get("original_manager_price", "").strip()
-                    if manager_price_in_sheet:
-                        continue
-                    # Якщо вже є ціна від бота – пропускаємо
-                    if "bot_price" in app:
-                        continue
-                    row_idx = app.get("sheet_row")
-                    if not row_idx:
-                        continue
-                    bot_price_value = calculate_and_set_bot_price(app, row_idx, price_config)
-                    if bot_price_value is not None:
-                        app["bot_price"] = float(bot_price_value)
-                        app["proposal"] = str(bot_price_value)
-                        app["proposal_status"] = "Agreed"
-                        culture = app.get("culture", "Невідомо")
-                        quantity = app.get("quantity", "Невідомо")
-                        msg = (
-                            f"З'явилася пропозиція для Вашої заявки {idx+1}. {culture} | {quantity} т: {bot_price_value}\n\n"
-                            "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
-                        )
-                        try:
-                            await bot.send_message(app.get("chat_id"), msg)
-                        except BotBlocked:
-                            pass
-                        changed = True
-            if changed:
-                save_applications(updated_apps)
+            if AUTO_CALC_ENABLED:
+                updated_apps = load_applications()
+                changed = False
+                for uid, app_list in updated_apps.items():
+                    for idx, app in enumerate(app_list):
+                        status = app.get("proposal_status", "active")
+                        if status in ("deleted", "confirmed", "Agreed"):
+                            continue
+                        manager_price_in_sheet = app.get("original_manager_price", "").strip()
+                        if manager_price_in_sheet:
+                            continue
+                        if "bot_price" in app:
+                            continue
+
+                        row_idx = app.get("sheet_row")
+                        if not row_idx:
+                            continue
+
+                        bot_price_value = calculate_and_set_bot_price(app, row_idx, price_config)
+                        if bot_price_value is not None:
+                            app["bot_price"] = float(bot_price_value)
+                            app["proposal"] = str(bot_price_value)
+                            app["proposal_status"] = "Agreed"
+                            culture = app.get("culture", "Невідомо")
+                            quantity = app.get("quantity", "Невідомо")
+                            msg = (
+                                f"З'явилася пропозиція для Вашої заявки {idx+1}. "
+                                f"{culture} | {quantity} т: {bot_price_value}\n\n"
+                                "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
+                                "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                            )
+                            try:
+                                await bot.send_message(app.get("chat_id"), msg)
+                            except BotBlocked:
+                                pass
+                            changed = True
+                if changed:
+                    save_applications(updated_apps)
+
         except Exception as e:
             logging.exception(f"Помилка у фоні: {e}")
+
         await asyncio.sleep(CHECK_INTERVAL)
 
 async def schedule_next_topicality(user_id: int):
