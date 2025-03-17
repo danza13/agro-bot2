@@ -668,10 +668,9 @@ def update_worksheet2_cells_for_edit_color(sheet_row: int, changed_fields: dict)
 
 async def re_run_autocalc_for_app(uid: str, index: int):
     """
-    Після редагування заявки перезапустити логіку:
-    - Якщо manager_price вже встановлена, пропускаємо
-    - Якщо заявка уже confirmed/deleted/Agreed, теж пропускаємо
-    - Якщо ботова ціна вже була виставлена раніше, але дані змінились — перезаписати
+    Після редагування заявки замість негайного автоперерахунку
+    просто видаляємо поточну bot_price і очищаємо клітинку в Google Sheets.
+    Наступного разу (у poll_manager_proposals) бот уже сам перераховує ціну.
     """
     apps = load_applications()
     user_apps = apps.get(uid, [])
@@ -681,43 +680,32 @@ async def re_run_autocalc_for_app(uid: str, index: int):
     app = user_apps[index]
     status = app.get("proposal_status", "active")
     if status in ("deleted", "confirmed"):
+        # Якщо заявка видалена або підтверджена – нічого не робимо
         return
 
     manager_price_in_sheet = app.get("original_manager_price", "").strip()
     if manager_price_in_sheet:
-        return  # Якщо менеджер уже задав ціну, не чіпаємо
+        # Якщо менеджерська ціна вже встановлена – не ліземо
+        return
 
-    # Якщо вже була встановлена ботова ціна, треба перевизначити
-    # (Видаляємо стару bot_price, щоб розрахувати заново)
+    row_idx = app.get("sheet_row")
+    if not row_idx:
+        # Якщо немає рядка у таблиці – нічого не робимо
+        return
+
+    # Якщо у нас вже була ботова ціна – видаляємо
     if "bot_price" in app:
         del app["bot_price"]
 
-    row_idx = app.get("sheet_row", None)
-    if not row_idx:
-        return
+    # Обнулюємо пропозицію: щоб у файлі не залишався запис
+    app["proposal"] = ""
+    app["proposal_status"] = "active"  # або "waiting", залежить від вашої логіки
 
-    price_config = parse_price_sheet()
-    new_bot_price = calculate_and_set_bot_price(app, row_idx, price_config)
-    if new_bot_price is not None:
-        app["bot_price"] = float(new_bot_price)
-        app["proposal"] = str(new_bot_price)
-        app["proposal_status"] = "Agreed"
-
-        # Спробуємо відправити повідомлення користувачу, що з'явилася нова ціна
-        chat_id = app.get("chat_id")
-        if chat_id:
-            culture = app.get("culture", "Невідомо")
-            quantity = app.get("quantity", "Невідомо")
-            msg = (
-                    f"Після редагування даних сформована нова пропозиція для Вашої заявки: {new_bot_price}\n"
-                    f"({culture}, {quantity})\n\n"
-                    "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
-                )
-            try:
-                await asyncio.sleep(1)  # Легка затримка, щоб не було «хвилею»
-                from loader import bot
-                await bot.send_message(chat_id, msg)
-            except Exception as e:
-                logging.exception(f"Помилка відправки повідомлення про нову ботову ціну: {e}")
+    # Видаляємо ціну бота з Google Sheets (колонка 13 у вашому прикладі)
+    from gsheet_utils import delete_price_cell_in_table2
+    delete_price_cell_in_table2(row_idx, col=13)
 
     save_applications(apps)
+    # Після цього poll_manager_proposals() при наступному циклі помітить,
+    # що manager_price і bot_price відсутні – і спробує заново розрахувати.
+
