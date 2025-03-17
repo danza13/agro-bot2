@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text, Regexp
+from bot import schedule_next_topicality
 
 from loader import dp, bot
 from config import ADMINS, friendly_names
