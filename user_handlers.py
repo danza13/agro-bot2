@@ -44,9 +44,12 @@ def build_topicality_details(app: dict) -> str:
         formatted_date = timestamp
     details = (
         f"Дата створення: {formatted_date}\n"
-        f"ФГ: {app.get('fgh_name', 'Невідомо')}\n"
-        f"Культура: {app.get('culture', 'Невідомо')}\n"
-        f"Кількість: {app.get('quantity', 'Невідомо')} т"
+        f"Група: {group}\n"
+        f"Культура: {culture}\n"
+        f"Кількість: {quantity} т\n"
+        f"Форма оплати: {payment_form}\n"
+        f"Валюта: {currency}\n"
+        f"Ціна: {price}"
     )
     return details
 
