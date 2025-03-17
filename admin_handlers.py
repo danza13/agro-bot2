@@ -6,6 +6,8 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text, Regexp
 
+from auto_calc import save_auto_calc_setting, load_auto_calc_setting
+
 from loader import dp, bot, pause_polling, resume_polling
 from config import ADMINS, friendly_names
 from states import AdminMenuStates, AdminReview
