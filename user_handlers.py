@@ -39,10 +39,21 @@ from gsheet_utils import (
 @dp.message_handler(commands=["start"], state="*")
 async def cmd_start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    uid = str(user_id)
+    # Перевірка, чи є у користувача активна заявка з процесом уточнення (topicality)
+    apps = load_applications()
+    if uid in apps:
+        for app in apps[uid]:
+            if app.get("topicality_in_progress"):
+                await message.answer(
+                    "У вас відкрито процес уточнення актуальності заявки. "
+                    "Будь ласка, завершіть його (натисніть «Актуальна», «Потребує змін» або «Видалити») перед використанням /start.",
+                    reply_markup=remove_keyboard()
+                )
+                return
+
     await state.finish()
     users = load_users()
-    uid = str(user_id)
-
     if uid in users.get("blocked_users", []):
         await message.answer("На жаль, у Вас немає доступу.", reply_markup=remove_keyboard())
         return
@@ -204,23 +215,47 @@ async def return_to_editing_menu(message: types.Message, state: FSMContext):
 @dp.message_handler(commands=["menu"], state="*")
 async def show_menu(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    users = load_users()
     uid = str(user_id)
+    # Перевірка активного уточнення заявки
+    apps = load_applications()
+    if uid in apps:
+        for app in apps[uid]:
+            if app.get("topicality_in_progress"):
+                await message.answer(
+                    "У вас відкрито процес уточнення актуальності заявки. "
+                    "Будь ласка, завершіть його (натисніть «Актуальна», «Потребує змін» або «Видалити») перед використанням команди /menu.",
+                    reply_markup=remove_keyboard()
+                )
+                return
 
+    await state.finish()
+    users = load_users()
     if uid not in users.get("approved_users", {}):
         await message.answer("Немає доступу. Очікуйте схвалення.", reply_markup=remove_keyboard())
         return
-
-    await state.finish()
     await message.answer("Головне меню:", reply_markup=get_main_menu_keyboard())
 
 
 @dp.message_handler(commands=["support"], state="*")
 async def support_command(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    uid = str(user_id)
+    # Перевірка активного уточнення заявки
+    apps = load_applications()
+    if uid in apps:
+        for app in apps[uid]:
+            if app.get("topicality_in_progress"):
+                await message.answer(
+                    "У вас відкрито процес уточнення актуальності заявки. "
+                    "Будь ласка, завершіть його (натисніть «Актуальна», «Потребує змін» або «Видалити») перед використанням команди /support.",
+                    reply_markup=remove_keyboard()
+                )
+                return
+
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(types.InlineKeyboardButton("Звернутись до підтримки", url="https://t.me/Dealeragro_bot"))
     await message.answer("Якщо вам потрібна допомога, натисніть кнопку нижче:", reply_markup=keyboard)
-
+    
 @dp.message_handler(Text(equals="Актуальна"), state=ApplicationStates.viewing_topicality)
 async def topicality_actual(message: types.Message, state: FSMContext):
     logging.info(f"[TOPICALITY] Користувач {message.from_user.id} натиснув 'Актуальна'")
@@ -1029,6 +1064,12 @@ async def webapp2_data_handler_web_app(message: types.Message, state: FSMContext
 
 
 async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext):
+    """
+    Функція обробки даних із форми уточнення актуальності.
+    Якщо користувач надіслав нові дані (навіть якщо зміни відсутні), 
+    скидаємо прапорець topicality_in_progress та запускаємо наступну перевірку заявки.
+    Якщо дані порожні – відправляємо повідомлення.
+    """
     if not data_dict:
         await bot.send_message(user_id, "Дані порожні, спробуйте ще раз.", reply_markup=remove_keyboard())
         return
@@ -1085,10 +1126,10 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
     save_applications(apps)
 
     if changed_fields:
-        # Оновлюємо таблицю1 (жовте підсвічування)
+        # Оновлюємо форматування у таблицях
         update_worksheet1_cells_for_edit(sheet_row, changed_fields)
         update_worksheet2_cells_for_edit_color(sheet_row, changed_fields)
-        
+
         # Записуємо дату/час змін у колонку N (14) таблиці2
         now_str = datetime.now(ZoneInfo("Europe/Kiev")).strftime("%d.%m.%Y\n%H:%M:%S")
         ws2 = get_worksheet2()
@@ -1102,13 +1143,22 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
     else:
         await bot.send_message(user_id, "Нічого не змінено.", reply_markup=remove_keyboard())
 
-    # Повертаємось до детальної інформації:
+    # ===== НОВИЙ ФРАГМЕНТ =====
+    # Якщо користувач успішно надіслав форму, скидаємо прапорець topicality_in_progress
+    if app.get("topicality_in_progress"):
+        app["topicality_in_progress"] = False
+        save_applications(apps)
+        # Запускаємо наступну перевірку заявки через 10 секунд
+        await asyncio.create_task(schedule_next_topicality(user_id))
+    # ===== КІНЕЦЬ НОВОГО ФРАГМЕНТА =====
+
+    # Повертаємось до детальної інформації по заявці
     app_updated = user_apps[index]
     timestamp = app_updated.get("timestamp", "")
     try:
         dt = datetime.fromisoformat(timestamp)
         formatted_date = dt.strftime("%d.%m.%Y")
-    except:
+    except Exception:
         formatted_date = timestamp
 
     status = app_updated.get("proposal_status", "")
