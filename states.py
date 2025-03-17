@@ -47,3 +47,4 @@ class AdminReview(StatesGroup):
     select_new_status = State()
     sending_mass_message = State()
     sending_private_message = State()
+    auto_price_section = State()
