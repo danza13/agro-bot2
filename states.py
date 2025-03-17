@@ -10,19 +10,19 @@ class RegistrationStates(StatesGroup):
     editing_phone = State()
 
 class ApplicationStates(StatesGroup):
-    waiting_for_webapp_data = State()        # Користувач відкриває WebApp для створення заявки
-    confirm_application = State()            # Користувач переглядає заявку, підтверджує
-    editing_application = State()            # (старий стан) коли редагуємо перед створенням
-    viewing_applications = State()           # Перегляд списку заявок
-    viewing_application = State()            # Перегляд детально однієї заявки
-    viewing_proposal = State()               # Перегляд пропозиції
-    proposal_reply = State()                 # Підтвердити/Відхилити пропозицію
-    editing_choice = State()                 # Кнопки: "Відкрити форму редагування" / "Скасувати"
-    waiting_for_webapp2_data = State()       # Чекаємо даних зі скороченого WebApp2
-    deletion_confirmation = State()          # Підтвердження видалення заявки
-    viewing_topicality = State()            # Створення сповіщення (запит: "Ваша заявка ... актуальна?")
-    topicality_editing = State()            # Обробка натискання "Потребує змін"
-    topicality_deletion_confirmation = State()  # Обробка видалення заявки
+    waiting_for_webapp_data = State()
+    confirm_application = State()
+    editing_application = State()
+    viewing_applications = State()
+    viewing_application = State()
+    viewing_proposal = State()
+    proposal_reply = State()
+    editing_choice = State()
+    waiting_for_webapp2_data = State()
+    deletion_confirmation = State()
+    viewing_topicality = State()
+    topicality_editing = State()
+    topicality_deletion_confirmation = State()
     
 class AdminMenuStates(StatesGroup):
     choosing_section = State()
