@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from keyboards import get_topicality_keyboard
 
+from auto_calc import load_auto_calc_setting, save_auto_calc_setting
+
 from loader import bot, dp
 from config import CHECK_INTERVAL, API_PORT
 from db import load_applications, save_applications
@@ -21,7 +23,7 @@ import admin_handlers
 import user_handlers
 
 POLLING_PAUSED = False
-AUTO_CALC_ENABLED = True  # за замовчуванням вмикаємо
+AUTO_CALC_ENABLED = load_auto_calc_setting()
 
 def pause_polling():
     global POLLING_PAUSED
