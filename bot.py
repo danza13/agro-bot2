@@ -216,40 +216,35 @@ async def poll_manager_proposals():
         await asyncio.sleep(CHECK_INTERVAL)
 
 async def schedule_next_topicality(user_id: int):
-    # Чекаємо 10 секунд після завершення вибору
+    logging.info(f"[TOPICALITY] Планується перевірка наступної заявки для користувача {user_id} через 10 секунд")
     await asyncio.sleep(10)
-    # Викликаємо перевірку для цього користувача
     apps = load_applications()
     uid = str(user_id)
-    # Якщо вже немає заявки з "topicality_in_progress", спробуємо відправити наступну
     if uid in apps:
         user_apps = apps[uid]
-        # Якщо немає жодної заявки, нічого не робимо
         if not user_apps:
+            logging.info(f"[TOPICALITY] Користувач {user_id} не має жодної заявки")
             return
-        # Якщо жодна заявка не має прапорця "topicality_in_progress" і існує заявка, що потребує сповіщення,
-        # надсилаємо сповіщення для першої, що відповідає умовам.
         if not any(app.get("topicality_in_progress") for app in user_apps):
             for idx, app in enumerate(user_apps):
+                try:
+                    submission_time = datetime.fromisoformat(app["timestamp"])
+                except Exception as e:
+                    logging.exception(f"[TOPICALITY] Помилка перетворення timestamp для заявки {idx} користувача {user_id}: {e}")
+                    continue
                 if app.get("proposal_status", "active") in ("active", "waiting") and not app.get("topicality_notification_sent", False):
-                    # Перевіряємо, чи заявка старша 24 години
-                    try:
-                        submission_time = datetime.fromisoformat(app["timestamp"])
-                    except Exception:
-                        continue
                     if datetime.now() - submission_time >= timedelta(hours=24):
                         app["topicality_notification_sent"] = True
                         app["topicality_in_progress"] = True
-                        msg_text = (
-                            f"Ваша заявка {idx+1}. {app.get('culture', 'Невідомо')} | "
-                            f"{app.get('quantity', 'Невідомо')} т актуальна, чи потребує змін або видалення?"
-                        )
+                        msg_text = (f"Ваша заявка {idx+1}. {app.get('culture', 'Невідомо')} | "
+                                    f"{app.get('quantity', 'Невідомо')} т актуальна, чи потребує змін або видалення?")
                         try:
                             await bot.send_message(app.get("chat_id"), msg_text, reply_markup=get_topicality_keyboard())
+                            logging.info(f"[TOPICALITY] Надіслано сповіщення для заявки {idx+1} користувача {user_id}")
                         except Exception as e:
-                            logging.exception(e)
-                        break  # надсилаємо лише одне сповіщення
-            save_applications(apps)
+                            logging.exception(f"[TOPICALITY] Помилка надсилання сповіщення для користувача {user_id}: {e}")
+                        break
+    save_applications(apps)
 
 
 ########################################################
