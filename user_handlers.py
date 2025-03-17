@@ -70,6 +70,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
                     "\n\nБудь ласка, завершіть його, обравши одну з опцій:",
                     reply_markup=kb
                 )
+                await state.set_state(ApplicationStates.viewing_topicality)
                 return
 
     await state.finish()
@@ -249,6 +250,7 @@ async def show_menu(message: types.Message, state: FSMContext):
                     "\n\nБудь ласка, завершіть його, обравши одну з опцій:",
                     reply_markup=kb
                 )
+                await state.set_state(ApplicationStates.viewing_topicality)
                 return
 
     await state.finish()
@@ -275,6 +277,7 @@ async def support_command(message: types.Message, state: FSMContext):
                     "\n\nБудь ласка, завершіть його, обравши одну з опцій:",
                     reply_markup=kb
                 )
+                await state.set_state(ApplicationStates.viewing_topicality)
                 return
 
     keyboard = types.InlineKeyboardMarkup()
