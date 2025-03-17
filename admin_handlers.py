@@ -708,7 +708,8 @@ async def admin_requests_section_handler(message: types.Message, state: FSMConte
     # Ось тут додаємо пункт «Ціна бота»:
     elif text == "Ціна бота":
         # Імпортуємо глобальну змінну з bot.py:
-        from bot import AUTO_CALC_ENABLED
+        from auto_calc import load_auto_calc_setting
+        AUTO_CALC_ENABLED = load_auto_calc_setting()
         status_text = "Увімкнена" if AUTO_CALC_ENABLED else "Вимкнена"
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         # Додаємо кнопку залежно від стану
