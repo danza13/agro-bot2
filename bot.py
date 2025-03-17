@@ -26,7 +26,6 @@ import admin_handlers
 import user_handlers
 
 POLLING_PAUSED = False
-AUTO_CALC_ENABLED = load_auto_calc_setting()
 
 def pause_polling():
     global POLLING_PAUSED
