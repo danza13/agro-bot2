@@ -35,23 +35,33 @@ from gsheet_utils import (
 
 # Допоміжна функція для формування деталей заявки при уточненні актуальності
 def build_topicality_details(app: dict) -> str:
-    """Формує рядок з деталями заявки для сповіщення про уточнення актуальності."""
+    # Отримуємо дату створення заявки
     timestamp = app.get("timestamp", "")
     try:
         dt = datetime.fromisoformat(timestamp)
         formatted_date = dt.strftime("%d.%m.%Y")
     except Exception:
         formatted_date = timestamp
+
+    # Отримуємо інші поля заявки з дефолтним значенням "Невідомо", якщо їх немає
+    group_value = app.get("group", "Невідомо")
+    culture = app.get("culture", "Невідомо")
+    quantity = app.get("quantity", "Невідомо")
+    payment_form = app.get("payment_form", "Невідомо")
+    currency = app.get("currency", "Невідомо")
+    price = app.get("price", "Невідомо")
+
     details = (
-        f"Дата створення: {formatted_date}\n"
-        f"Група: {group}\n"
+        f"Дата: {formatted_date}\n"
+        f"Група: {group_value}\n"
         f"Культура: {culture}\n"
-        f"Кількість: {quantity} т\n"
+        f"Кількість: {quantity}\n"
         f"Форма оплати: {payment_form}\n"
         f"Валюта: {currency}\n"
         f"Ціна: {price}"
     )
     return details
+
 
 ############################################
 # РЕЄСТРАЦІЯ КОРИСТУВАЧА (/start)
