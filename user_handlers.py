@@ -333,10 +333,12 @@ async def topicality_actual(message: types.Message, state: FSMContext):
 @dp.message_handler(Text(equals="Потребує змін"), state=ApplicationStates.viewing_topicality)
 async def topicality_edit(message: types.Message, state: FSMContext):
     logging.info(f"[TOPICALITY] Користувач {message.from_user.id} натиснув 'Потребує змін'")
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.row("Форма редагування", "Назад")
     await state.update_data(topicality_action="edit")
     await message.answer("Відредагуйте заявку в формі:", reply_markup=kb)
     await ApplicationStates.topicality_editing.set()
+
 
 @dp.message_handler(Text(equals="Назад"), state=ApplicationStates.topicality_editing)
 async def topicality_edit_back(message: types.Message, state: FSMContext):
