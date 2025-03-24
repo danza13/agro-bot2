@@ -255,6 +255,29 @@ async def admin_decision_pending_user(message: types.Message, state: FSMContext)
     await message.answer(f"{response_text}\nНатисніть «Назад» для повернення в меню.", reply_markup=kb)
     await AdminMenuStates.moderation_section.set()
 
+@dp.message_handler(Text(equals="Назад"), state=AdminReview.waiting_for_decision)
+async def back_to_pending_list(message: types.Message, state: FSMContext):
+    # 1) Повідомлення, що повертаємося
+    await message.answer("Повертаємось до списку користувачів на модерацію:", 
+                         reply_markup=remove_keyboard())  # або якась ваша клавіатура
+
+    # 2) Повертаємось у стан waiting_for_application_selection
+    #   (де ви показували список pending-користувачів)
+    pending = (await state.get_data()).get("pending_dict", {})
+
+    if not pending:
+        # Якщо вже немає пендінг-користувачів – просто повертаємось у меню «Модерація»:
+        await message.answer("Заявок на модерацію немає.", reply_markup=get_admin_moderation_menu())
+        await AdminMenuStates.moderation_section.set()
+    else:
+        # Показуємо перелік користувачів знову
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        for uid, info in pending.items():
+            kb.add(info.get("fullname", "Невідомо"))
+        kb.add("Назад")
+        await message.answer("Оберіть заявку для перегляду:", reply_markup=kb)
+        await AdminReview.waiting_for_application_selection.set()
+
 
 ############################################
 # База користувачів (схвалені)
