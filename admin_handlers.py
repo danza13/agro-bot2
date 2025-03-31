@@ -131,25 +131,30 @@ async def admin_menu_choosing_section(message: types.Message, state: FSMContext)
 @dp.message_handler(state=AdminMenuStates.moderation_section)
 async def admin_moderation_section_handler(message: types.Message, state: FSMContext):
     text = message.text.strip()
+    
     if text == "Користувачі на модерацію":
         users_data = load_users()
         pending = users_data.get("pending_users", {})
         if not pending:
             await message.answer("Немає заявок на модерацію.", reply_markup=get_admin_moderation_menu())
             return
+        
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         for uid, info in pending.items():
             kb.add(info.get("fullname", "Невідомо"))
         kb.add("Назад")
+        
         await message.answer("Оберіть заявку для перегляду:", reply_markup=kb)
         await AdminReview.waiting_for_application_selection.set()
         await state.update_data(pending_dict=pending, from_moderation_menu=True)
+
     elif text == "База користувачів":
         users_data = load_users()
         approved = users_data.get("approved_users", {})
         if not approved:
             await message.answer("Немає схвалених користувачів.", reply_markup=get_admin_moderation_menu())
             return
+        
         approved_dict = {}
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         row = []
@@ -168,12 +173,25 @@ async def admin_moderation_section_handler(message: types.Message, state: FSMCon
         await state.update_data(approved_dict=approved_dict, from_moderation_menu=True)
         await message.answer("Список схвалених користувачів:", reply_markup=kb)
         await AdminReview.viewing_approved_list.set()
+    
+    elif text == "Очистити заблокованих":
+        from db import load_users, save_users
+        users_data = load_users()
+        # Повністю очищаємо список заблокованих
+        users_data["blocked_users"] = []
+        save_users(users_data)
+
+        await message.answer(
+            "Список заблокованих користувачів успішно очищено!",
+            reply_markup=get_admin_moderation_menu()
+        )
+
     elif text == "Назад":
         await message.answer("Головне меню адміна:", reply_markup=get_admin_root_menu())
         await AdminMenuStates.choosing_section.set()
-    else:
-        await message.answer("Оберіть зі списку: «Користувачі на модерацію», «База користувачів» або «Назад».")
 
+    else:
+        await message.answer("Оберіть зі списку: «Користувачі на модерацію», «База користувачів», «Очистити заблокованих» або «Назад».")
 
 @dp.message_handler(state=AdminReview.waiting_for_application_selection)
 async def admin_select_pending_application(message: types.Message, state: FSMContext):
