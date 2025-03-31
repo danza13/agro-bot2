@@ -190,7 +190,10 @@ async def admin_moderation_section_handler(message: types.Message, state: FSMCon
         await AdminMenuStates.choosing_section.set()
 
     else:
-        await message.answer("Оберіть зі списку: «Користувачі на модерацію», «База користувачів», «Очистити заблокованих» або «Назад».")
+        await message.answer(
+            "Оберіть зі списку: «Користувачі на модерацію», «База користувачів», "
+            "«Очистити заблокованих» або «Назад»."
+        )
 
 @dp.message_handler(state=AdminReview.waiting_for_application_selection)
 async def admin_select_pending_application(message: types.Message, state: FSMContext):
@@ -198,17 +201,23 @@ async def admin_select_pending_application(message: types.Message, state: FSMCon
         await message.answer("Повертаємось до розділу 'Модерація':", reply_markup=get_admin_moderation_menu())
         await AdminMenuStates.moderation_section.set()
         return
+
     data = await state.get_data()
     pending = data.get("pending_dict", {})
     selected_fullname = message.text.strip()
     uid = None
-    for k, info in pending.items():
+    for pending_uid, info in pending.items():
         if info.get("fullname", "").strip() == selected_fullname:
-            uid = k
+            uid = pending_uid
             break
+
     if not uid:
-        await message.answer("Заявку не знайдено. Спробуйте ще раз або натисніть 'Назад'.", reply_markup=remove_keyboard())
+        await message.answer(
+            "Заявку не знайдено. Спробуйте ще раз або натисніть 'Назад'.",
+            reply_markup=remove_keyboard()
+        )
         return
+
     info = pending[uid]
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -219,57 +228,82 @@ async def admin_select_pending_application(message: types.Message, state: FSMCon
         formatted_timestamp = dt_kyiv.strftime("%d.%m.%Y | %H:%M:%S")
     else:
         formatted_timestamp = "Невідомо"
-    text = (
+
+    text_answer = (
         f"Користувач на модерацію:\n"
         f"User ID: {uid}\n"
         f"ПІБ: {info.get('fullname', 'Невідомо')}\n"
         f"Номер: {info.get('phone', '')}\n"
         f"Дата та час: {formatted_timestamp}"
     )
+
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add("Дозволити", "Заблокувати")
+    kb.row("Дозволити", "Заблокувати", "Видалити")
     kb.add("Назад")
+
     await state.update_data(selected_uid=uid)
-    await message.answer(text, reply_markup=kb)
+    await message.answer(text_answer, reply_markup=kb)
     await AdminReview.waiting_for_decision.set()
 
 
-@dp.message_handler(lambda msg: msg.text in ["Дозволити", "Заблокувати"], state=AdminReview.waiting_for_decision)
+@dp.message_handler(lambda msg: msg.text in ["Дозволити", "Заблокувати", "Видалити"], state=AdminReview.waiting_for_decision)
 async def admin_decision_pending_user(message: types.Message, state: FSMContext):
     data = await state.get_data()
     uid = data.get("selected_uid", None)
     if not uid:
         await message.answer("Не знайдено користувача.", reply_markup=remove_keyboard())
         return
+
+    users_data = load_users()
+
+    # Дії залежно від натисненої кнопки
     if message.text == "Дозволити":
         approve_user(uid)
         response_text = "Користувача дозволено."
+
+        # Надсилаємо повідомлення користувачу
         try:
             await bot.send_message(
                 int(uid),
-                "Вітаємо! Ви пройшли модерацію і тепер можете користуватися ботом. Для початку роботи натисніть /start в Меню",
+                "Вітаємо! Ви пройшли модерацію і тепер можете користуватися ботом. "
+                "Для початку роботи натисніть /start у меню.",
                 reply_markup=remove_keyboard()
             )
         except Exception as e:
             logging.exception(f"Не вдалося надіслати повідомлення користувачу {uid}: {e}")
-    else:
+
+    elif message.text == "Заблокувати":
         block_user(uid)
         response_text = "Користувача заблоковано."
+
+        # Надсилаємо повідомлення користувачу
         try:
             await bot.send_message(
                 int(uid),
-                "На жаль, Ви не пройшли модерацію.",
+                "На жаль, Ви не пройшли модерацію і Вас заблоковано.",
                 reply_markup=remove_keyboard()
             )
         except Exception as e:
             logging.exception(f"Не вдалося надіслати повідомлення користувачу {uid}: {e}")
-    users_data = load_users()
-    if uid in users_data.get("pending_users", {}):
-        users_data["pending_users"].pop(uid)
-        save_users(users_data)
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+    elif message.text == "Видалити":
+        # Лише видаляємо користувача з pending, щоб він міг знову подати заявку
+        if uid in users_data.get("pending_users", {}):
+            users_data["pending_users"].pop(uid)
+            save_users(users_data)
+
+        response_text = (
+            "Користувача вилучено зі списку pending_users. "
+            "Тепер він зможе знову подати заявку."
+        )
+
+    # Повернення в меню
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.add("Назад")
-    await message.answer(f"{response_text}\nНатисніть «Назад» для повернення в меню.", reply_markup=kb)
+    await message.answer(
+        f"{response_text}\nНатисніть «Назад» для повернення в меню.",
+        reply_markup=kb
+    )
     await AdminMenuStates.moderation_section.set()
 
 @dp.message_handler(Text(equals="Назад"), state=AdminReview.waiting_for_decision)
@@ -498,6 +532,8 @@ async def admin_view_approved_single_user(message: types.Message, state: FSMCont
     if not user_id_str:
         await message.answer("Немає вибраного користувача.", reply_markup=get_admin_moderation_menu())
         return
+
+    # Кнопка "Назад"
     if text == "Назад":
         users_data = load_users()
         approved = users_data.get("approved_users", {})
@@ -505,40 +541,70 @@ async def admin_view_approved_single_user(message: types.Message, state: FSMCont
             await message.answer("Наразі немає схвалених користувачів.", reply_markup=get_admin_moderation_menu())
             await AdminMenuStates.moderation_section.set()
             return
+        # Повертаємо список знову
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         row = []
-        approved_items = list(approved.items())
-        for i, (uid, info) in enumerate(approved_items, start=1):
+        for uid, info in approved.items():
             fname = info.get("fullname", f"ID:{uid}")
-            btn_text = f"{fname} | {uid}"
-            row.append(btn_text)
+            row.append(fname)
             if len(row) == 2:
                 kb.row(*row)
                 row = []
         if row:
             kb.row(*row)
+        kb.row("Вивантажити базу", "Розсилка")
         kb.add("Назад")
-        await state.update_data(approved_dict=approved)
-        await AdminReview.viewing_approved_list.set()
+
         await message.answer("Список схвалених користувачів:", reply_markup=kb)
+        await AdminReview.viewing_approved_list.set()
         return
+
+    # Кнопка "Редагувати"
     elif text == "Редагувати":
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         kb.row("Змінити ПІБ", "Змінити номер телефону")
         kb.add("Назад")
         await message.answer("Оберіть, що бажаєте змінити:", reply_markup=kb)
         await AdminReview.editing_approved_user.set()
+
+    # Кнопка "Видалити" (повністю видаляє користувача з users.json)
     elif text == "Видалити":
         users_data = load_users()
-        if user_id_str in users_data.get("approved_users", {}):
-            users_data["approved_users"].pop(user_id_str)
-            save_users(users_data)
-            await message.answer("Користувача видалено із схвалених.", reply_markup=get_admin_moderation_menu())
-        else:
-            await message.answer("Користувача не знайдено у схвалених.", reply_markup=get_admin_moderation_menu())
+        uid = str(user_id_str)
+        # Прибираємо з усіх списків: approved_users, pending_users, blocked_users
+        if uid in users_data.get("approved_users", {}):
+            users_data["approved_users"].pop(uid)
+        if uid in users_data.get("pending_users", {}):
+            users_data["pending_users"].pop(uid)
+        if uid in users_data.get("blocked_users", []):
+            users_data["blocked_users"].remove(uid)
+
+        save_users(users_data)
+        await message.answer(
+            "Користувача повністю видалено з бази (усіх списків).",
+            reply_markup=get_admin_moderation_menu()
+        )
         await AdminMenuStates.moderation_section.set()
+
+    # Кнопка "Заблокувати"
+    elif text == "Заблокувати":
+        block_user(user_id_str)
+        await message.answer(
+            "Користувача перенесено у заблоковані.",
+            reply_markup=get_admin_moderation_menu()
+        )
+        await AdminMenuStates.moderation_section.set()
+
+    # Кнопка "Відправити повідомлення"
+    elif text == "Відправити повідомлення":
+        fullname = data.get("selected_fullname", "користувачу")
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        kb.add("Скасувати")
+        await message.answer(f"Введіть текст для відправки повідомлення користувачу {fullname}", reply_markup=kb)
+        await AdminReview.sending_private_message.set()
+
     else:
-        await message.answer("Оберіть: «Редагувати», «Видалити» або «Назад».")
+        await message.answer("Оберіть: «Редагувати», «Видалити», «Заблокувати», «Відправити повідомлення» або «Назад».")
 
 
 @dp.message_handler(state=AdminReview.editing_approved_user)
