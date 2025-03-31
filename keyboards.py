@@ -18,8 +18,10 @@ def get_admin_root_menu():
 def get_admin_moderation_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row("Користувачі на модерацію", "База користувачів")
+    kb.add("Очистити заблокованих")
     kb.add("Назад")
     return kb
+
 
 def get_admin_requests_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
