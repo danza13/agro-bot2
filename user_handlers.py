@@ -28,10 +28,19 @@ from gsheet_utils import (
     update_google_sheet, color_cell_red, color_cell_green,
     color_cell_yellow, delete_price_cell_in_table2,
     get_worksheet1, get_worksheet2,
-    color_entire_row_green, color_entire_row_red,
+    color_entire_row_green, color_entire_row_red, format_cell_range, 
     update_worksheet1_cells_for_edit, re_run_autocalc_for_app, rowcol_to_a1, update_worksheet2_cells_for_edit_color
 )
 
+def color_cell_yellow_sheet1(row: int, col: int):
+    ws = get_worksheet1()
+    cell_range = f"{rowcol_to_a1(row, col)}:{rowcol_to_a1(row, col)}"
+    format_cell_range(ws, cell_range, yellow_format)
+
+def color_cell_yellow_sheet2(row: int, col: int):
+    ws2 = get_worksheet2()
+    cell_range = f"{rowcol_to_a1(row, col)}:{rowcol_to_a1(row, col)}"
+    format_cell_range(ws2, cell_range, yellow_format)
 
 # Допоміжна функція для формування деталей заявки при уточненні актуальності
 def build_topicality_details(app: dict) -> str:
@@ -807,8 +816,8 @@ async def proposal_rejected(message: types.Message, state: FSMContext):
     await ApplicationStates.proposal_reply.set()
 
 
-@dp.message_handler(Text(equals="Очікувати"), state=ApplicationStates.proposal_reply)
-async def wait_after_rejection(message: types.Message, state: FSMContext):
+@dp.message_handler(Text(equals="Очікувати"), state="*")
+async def wait_after_rejection(message: types.Message, state):
     data = await state.get_data()
     index = data.get("selected_app_index")
     if index is None:
@@ -816,6 +825,7 @@ async def wait_after_rejection(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
+    # Оновлюємо статус заявки на "waiting"
     update_application_status(message.from_user.id, index, "waiting")
 
     apps = load_applications()
@@ -824,13 +834,25 @@ async def wait_after_rejection(message: types.Message, state: FSMContext):
     app["onceWaited"] = True
     save_applications(apps)
 
-    # Можна додати фарбування або іншу логіку
+    # Фарбування клітинок залежно від типу пропозиції
+    sheet_row = app.get("sheet_row")
+    if sheet_row:
+        if "bot_price" in app:
+            # Якщо це ціна бота, фарбування:
+            # SHEET1: стовпець O (15), SHEET2: стовпець M (13)
+            color_cell_yellow_sheet1(sheet_row, 15)
+            color_cell_yellow_sheet2(sheet_row, 13)
+        else:
+            # Якщо це менеджерська ціна, фарбування:
+            # SHEET1: стовпець N (14), SHEET2: стовпець L (12)
+            color_cell_yellow_sheet1(sheet_row, 14)
+            color_cell_yellow_sheet2(sheet_row, 12)
+
     await message.answer(
         "Заявка оновлена. Ви будете повідомлені при появі кращої пропозиції.",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("Головне меню")
     )
     await state.finish()
-
 
 @dp.message_handler(Text(equals="Видалити"), state=ApplicationStates.proposal_reply)
 async def delete_after_rejection(message: types.Message, state: FSMContext):
