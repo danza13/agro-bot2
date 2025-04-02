@@ -29,7 +29,8 @@ from gsheet_utils import (
     color_cell_yellow, delete_price_cell_in_table2,
     get_worksheet1, get_worksheet2,
     color_entire_row_green, color_entire_row_red, format_cell_range, 
-    update_worksheet1_cells_for_edit, re_run_autocalc_for_app, rowcol_to_a1, update_worksheet2_cells_for_edit_color
+    update_worksheet1_cells_for_edit, re_run_autocalc_for_app, rowcol_to_a1, update_worksheet2_cells_for_edit_color,
+    yellow_format
 )
 
 def color_cell_yellow_sheet1(row: int, col: int):
