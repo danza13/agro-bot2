@@ -159,45 +159,47 @@ async def poll_manager_proposals():
                 except ValueError:
                     continue
 
-                for uid, app_list in apps.items():
-                    for idx, app in enumerate(app_list):
-                        if app.get("sheet_row") == i:
-                            status = app.get("proposal_status", "active")
-                            if status in ("deleted", "confirmed"):
-                                continue
+            for uid, app_list in apps.items():
+                for idx, app in enumerate(app_list):
+                    if app.get("sheet_row") == i:
+                        status = app.get("proposal_status", "active")
+                        if status in ("deleted", "confirmed"):
+                            continue
 
-                            previous_proposal = app.get("proposal")
-                            try:
-                                previous_price = float(previous_proposal) if previous_proposal else None
-                            except ValueError:
-                                previous_price = None
+                        previous_proposal = app.get("proposal")
+                        try:
+                            previous_price = float(previous_proposal) if previous_proposal else None
+                        except ValueError:
+                            previous_price = None
 
-                            # Якщо попередньої ціни немає або вона відрізняється від нової, оновлюємо
-                            if previous_price is None or previous_price != new_price:
-                                app["original_manager_price"] = (
-                                    str(previous_price) if previous_price is not None else ""
+                        if previous_price is None or previous_price != new_price:
+                            app["original_manager_price"] = (str(previous_price) if previous_price is not None else "")
+                            app["proposal"] = current_manager_price_str
+                            app["proposal_status"] = "Agreed"
+                            culture = app.get("culture", "Невідомо")
+                            quantity = app.get("quantity", "Невідомо")
+                            if previous_price is None:
+                                msg = (
+                                    f"З'явилась пропозиція по заявці {idx+1}. {culture} | {quantity} т Пропозиція ціни: {current_manager_price_str}\n\n"
+                                    "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
+                                    "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
                                 )
-                                app["proposal"] = current_manager_price_str
-                                app["proposal_status"] = "Agreed"
-                                if status == "waiting":
-                                    culture = app.get("culture", "Невідомо")
-                                    quantity = app.get("quantity", "Невідомо")
-                                    msg = (
-                                        f"Ціна по заявці {idx+1}. {culture} | {quantity} т змінилась з "
-                                        f"{previous_proposal} на {current_manager_price_str}\n\n"
-                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
-                                        "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
-                                    )
-                                else:
-                                    msg = (
-                                        f"Для Вашої заявки оновлено пропозицію: {current_manager_price_str}\n\n"
-                                        "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
-                                        "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
-                                    )
-                                try:
-                                    await bot.send_message(app.get("chat_id"), msg)
-                                except BotBlocked:
-                                    pass
+                            elif status == "waiting":
+                                msg = (
+                                    f"Ціна по заявці {idx+1}. {culture} | {quantity} т змінилась з {previous_proposal} на {current_manager_price_str}\n\n"
+                                    "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
+                                    "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                                )
+                            else:
+                                msg = (
+                                    f"Для Вашої заявки оновлено пропозицію: {current_manager_price_str}\n\n"
+                                    "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
+                                    "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
+                                )
+                            try:
+                                await bot.send_message(app.get("chat_id"), msg)
+                            except BotBlocked:
+                                pass
             save_applications(apps)
 
             # 2) Розрахунок автоматичної (ботової) ціни
