@@ -20,7 +20,7 @@ from gsheet_utils import (
     get_worksheet1, color_cell_red, color_cell_green, color_cell_yellow,
     parse_price_sheet, calculate_and_set_bot_price, get_worksheet2, rowcol_to_a1, color_entire_row_red
 )
-
+from admin_handlers import admin_remove_app_permanently
 # Імпортуємо хендлери (вони тепер імпортують bot/dispatcher з loader.py)
 import admin_handlers
 import user_handlers
@@ -251,7 +251,35 @@ async def poll_manager_proposals():
 
         await asyncio.sleep(CHECK_INTERVAL)
 
-
+async def poll_deleted_applications():
+    """
+    Функція перевіряє наявність заявок зі статусом "deleted".
+    Кожні 10 хвилин вона знаходить першу таку заявку та видаляє її,
+    використовуючи функцію admin_remove_app_permanently, яка призупиняє polling,
+    видаляє заявку з файлу та таблиць, оновлює sheet_row, і після затримок відновлює polling.
+    Потім функція чекає 10 хвилин і повторює перевірку.
+    """
+    while True:
+        apps = load_applications()
+        found = False
+        for uid, user_apps in apps.items():
+            for idx, app in enumerate(user_apps):
+                if app.get("proposal_status") == "deleted":
+                    logging.info(f"Знайдено заявку для видалення: user_id={uid}, app_index={idx}")
+                    # Викликаємо функцію видалення
+                    success = await admin_remove_app_permanently(int(uid), idx)
+                    if success:
+                        logging.info(f"Заявку user_id={uid}, app_index={idx} видалено успішно.")
+                    else:
+                        logging.error(f"Не вдалося видалити заявку user_id={uid}, app_index={idx}.")
+                    found = True
+                    break  # Видаляємо лише одну заявку за цикл
+            if found:
+                break
+        # Чекаємо 10 хвилин (600 секунд) перед наступною перевіркою
+        await asyncio.sleep(600)
+        
+        
 ########################################################
 # HTTP-сервер (опційно)
 ########################################################
@@ -286,6 +314,7 @@ async def on_startup(dp):
     asyncio.create_task(poll_manager_proposals())
     asyncio.create_task(poll_topicality_notifications())
     asyncio.create_task(start_webserver())
+    asyncio.create_task(poll_deleted_applications())
 
 ########################################################
 # Головний старт
