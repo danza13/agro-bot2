@@ -253,31 +253,49 @@ async def poll_manager_proposals():
 
 async def poll_deleted_applications():
     """
-    Функція перевіряє наявність заявок зі статусом "deleted".
-    Кожні 10 хвилин вона знаходить першу таку заявку та видаляє її,
-    використовуючи функцію admin_remove_app_permanently, яка призупиняє polling,
-    видаляє заявку з файлу та таблиць, оновлює sheet_row, і після затримок відновлює polling.
-    Потім функція чекає 10 хвилин і повторює перевірку.
+    Щодня о 02:00 призупиняє polling, видаляє абсолютно усі заявки,
+    які мають статус "deleted" (використовуючи логіку з admin_remove_app_permanently),
+    а о 04:00 відновлює polling.
     """
     while True:
+        now = datetime.now()
+        # Обчислюємо час до наступних 02:00
+        next_2 = now.replace(hour=2, minute=0, second=0, microsecond=0)
+        if now >= next_2:
+            next_2 += timedelta(days=1)
+        wait_seconds = (next_2 - now).total_seconds()
+        await asyncio.sleep(wait_seconds)
+
+        # О 02:00 призупиняємо polling
+        pause_polling()
+        print("Polling призупинено о 02:00. Розпочато видалення заявок зі статусом 'deleted'.")
+
+        # Завантажуємо всі заявки
         apps = load_applications()
-        found = False
-        for uid, user_apps in apps.items():
-            for idx, app in enumerate(user_apps):
-                if app.get("proposal_status") == "deleted":
-                    logging.info(f"Знайдено заявку для видалення: user_id={uid}, app_index={idx}")
-                    # Викликаємо функцію видалення
-                    success = await admin_remove_app_permanently(int(uid), idx)
-                    if success:
-                        logging.info(f"Заявку user_id={uid}, app_index={idx} видалено успішно.")
-                    else:
-                        logging.error(f"Не вдалося видалити заявку user_id={uid}, app_index={idx}.")
-                    found = True
-                    break  # Видаляємо лише одну заявку за цикл
-            if found:
-                break
-        # Чекаємо 10 хвилин (600 секунд) перед наступною перевіркою
-        await asyncio.sleep(600)
+        # Проходимо по кожному користувачу
+        for uid in list(apps.keys()):
+            # Для коректності видалення – перебираємо індекси у зворотному порядку
+            user_apps = apps[uid]
+            for app_index in sorted(range(len(user_apps)), reverse=True):
+                if user_apps[app_index].get("proposal_status") == "deleted":
+                    # Викликаємо функцію видалення, яка виконує всю необхідну логіку
+                    await admin_remove_app_permanently(int(uid), app_index)
+                    # Після видалення перезавантажуємо дані (щоб індекси не зміщувались некоректно)
+                    apps = load_applications()
+
+        print("Всі заявки зі статусом 'deleted' видалено.")
+
+        # Обчислюємо час до наступних 04:00
+        now = datetime.now()
+        next_4 = now.replace(hour=4, minute=0, second=0, microsecond=0)
+        if now >= next_4:
+            next_4 += timedelta(days=1)
+        wait_seconds = (next_4 - now).total_seconds()
+        await asyncio.sleep(wait_seconds)
+
+        # О 04:00 відновлюємо polling
+        resume_polling()
+        print("Polling відновлено о 04:00.")
         
         
 ########################################################
