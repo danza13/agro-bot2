@@ -195,7 +195,7 @@ async def poll_manager_proposals():
                                     )
                                 else:
                                     msg = (
-                                        f"Для Вашої заявки оновлено пропозицію: {current_manager_price_str}\n\n"
+                                        f"Для Вашої заявки {display_number}. {culture} | {quantity} т оновлено пропозицію: {current_manager_price_str}\n\n"
                                         "Для перегляду даної пропозиції натисніть /menu -> Переглянути мої заявки -> "
                                         "Оберіть заявку -> Переглянути пропозиції та оберіть потрібну дію"
                                     )
