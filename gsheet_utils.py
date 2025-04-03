@@ -290,11 +290,13 @@ def update_google_sheet(data: dict) -> int:
     ws.update_cell(new_row, 13, data.get("price", ""))
 
     ws.update_cell(new_row, 15, data.get("manager_price", ""))
-    ws.update_cell(new_row, 16, data.get("phone", ""))
+    ws.update_cell(new_row, 18, data.get("phone", ""))
+
     ws.update_cell(new_row, 52, data.get("user_id", ""))
 
     logging.info(f"Дані заявки записано в рядок {new_row}.")
     return new_row
+
 
 ############################################
 # Авто-розрахунок ціни після редагування
