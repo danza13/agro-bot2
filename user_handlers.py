@@ -763,6 +763,7 @@ async def back_from_proposal_to_detail(message: types.Message, state: FSMContext
         f"ФГ: {app.get('fgh_name', '')}",
         f"ЄДРПОУ: {app.get('edrpou', '')}",
         f"Область: {app.get('region', '')}",
+        f"Номер ФГ: {app.get('phone', '')}",
         f"Район: {app.get('district', '')}",
         f"Місто: {app.get('city', '')}",
         f"Група: {app.get('group', '')}",
@@ -960,6 +961,7 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         f"Дата створення: <b>{formatted_date}</b>\n\n"
         f"ФГ: <b>{app.get('fgh_name', 'Невідомо')}</b>\n"
         f"ЄДРПОУ: <b>{app.get('edrpou', 'Невідомо')}</b>\n"
+        f"Номер ФГ: <b>{app.get('phone', 'Невідомо')}</b>\n",
         f"Область: <b>{app.get('region', 'Невідомо')}</b>\n"
         f"Район: <b>{app.get('district', 'N/A')}</b>\n"
         f"Місто: <b>{app.get('city', 'Невідомо')}</b>\n"
@@ -1083,6 +1085,7 @@ async def cancel_webapp2_editing(message: types.Message, state: FSMContext):
         f"Дата створення: {formatted_date}",
         f"ФГ: {app.get('fgh_name', '')}",
         f"ЄДРПОУ: {app.get('edrpou', '')}",
+        f"Номер ФГ: {app.get('phone', '')}",
         f"Область: {app.get('region', '')}",
         f"Район: {app.get('district', '')}",
         f"Місто: {app.get('city', '')}",
@@ -1256,6 +1259,7 @@ async def process_webapp2_data(user_id: int, data_dict: dict, state: FSMContext)
         f"Дата створення: {formatted_date}",
         f"ФГ: {app_updated.get('fgh_name', '')}",
         f"ЄДРПОУ: {app_updated.get('edrpou', '')}",
+        f"Номер ФГ: {app_updated.get('phone', '')}",
         f"Область: {app_updated.get('region', '')}",
         f"Район: {app_updated.get('district', '')}",
         f"Місто: {app_updated.get('city', '')}",
@@ -1385,6 +1389,7 @@ async def cancel_deletion(message: types.Message, state: FSMContext):
         f"Дата створення: {formatted_date}",
         f"ФГ: {app.get('fgh_name', '')}",
         f"ЄДРПОУ: {app.get('edrpou', '')}",
+        f"Номер ФГ: {app.get('phone', '')}",
         f"Область: {app.get('region', '')}",
         f"Район: {app.get('district', '')}",
         f"Місто: {app.get('city', '')}",
