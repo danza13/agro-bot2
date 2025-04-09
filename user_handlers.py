@@ -961,7 +961,7 @@ async def confirm_proposal(message: types.Message, state: FSMContext):
         f"Дата створення: <b>{formatted_date}</b>\n\n"
         f"ФГ: <b>{app.get('fgh_name', 'Невідомо')}</b>\n"
         f"ЄДРПОУ: <b>{app.get('edrpou', 'Невідомо')}</b>\n"
-        f"Номер ФГ: <b>{app.get('phone', 'Невідомо')}</b>\n",
+        f"Номер ФГ: <b>{app.get('phone', 'Невідомо')}</b>\n"
         f"Область: <b>{app.get('region', 'Невідомо')}</b>\n"
         f"Район: <b>{app.get('district', 'N/A')}</b>\n"
         f"Місто: <b>{app.get('city', 'Невідомо')}</b>\n"
